@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@mono-repo-projs/ui": ["./packages/ui/src"],
+      "@mono-repo-projs/utils": ["./packages/utils/src"]
+    }
+  },
+  "exclude": ["node_modules"]
+}

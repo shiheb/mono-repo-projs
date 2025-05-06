@@ -1,0 +1,25 @@
+{
+  "$schema": "https://turborepo.org/schema.json",
+  "pipeline": {
+    "dev": {
+      "cache": false,
+      "dependsOn": ["^dev"],
+      "persistent": true // For long-running dev servers
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**", ".next/**"], // Added Next.js output
+      "env": ["NODE_ENV"] // Cache different builds for different envs
+    },
+    "lint": {
+      "outputs": [], // Lint typically has no outputs
+      "cache": true
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "outputs": ["coverage/**"],
+      "env": ["CI"]
+    }
+  },
+  "globalDependencies": [".env", "tsconfig.json", "package.json"]
+}

@@ -1,0 +1,16 @@
+name: Deploy ProjectWebSocket
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/websocket/**"
+      - "packages/ui/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter websocket run deploy
