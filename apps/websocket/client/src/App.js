@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { socket } from "./socket";
+import OneToMany from "./components/OneToMany";
 
 function App() {
   const [data, setData] = useState("");
@@ -27,6 +28,7 @@ function App() {
 
   return (
     <div>
+      <OneToMany />
       <p>This is data received from the server: {data}</p>
       <p>Number of users connected: {usersNumber}</p>
       <form onSubmit={sendMessage}>

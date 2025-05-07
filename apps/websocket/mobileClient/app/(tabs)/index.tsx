@@ -7,6 +7,8 @@ import {
   TextInput,
   Button,
   FlatList,
+  ScrollView,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useState, useCallback } from "react";
 import { HelloWave } from "@/components/HelloWave";
@@ -14,6 +16,7 @@ import ParallaxScrollView from "@/components/ParallaxScrollView";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { socket } from "../../components/socket";
+import OneToMany from "@/components/OneToMany";
 
 export default function HomeScreen() {
   const [data, setData] = useState("");
@@ -52,6 +55,7 @@ export default function HomeScreen() {
         <ThemedText type="title">Welcome!</ThemedText>
         <HelloWave />
       </ThemedView>
+      <OneToMany />
       <ThemedView style={styles.titleContainer}>
         <ThemedText>This is data received from the server:</ThemedText>
       </ThemedView>
@@ -65,23 +69,24 @@ export default function HomeScreen() {
       </ThemedView>
 
       <SafeAreaView style={{ flex: 1 }}>
-        <ThemedText type="subtitle">Message</ThemedText>
-        <TextInput
-          multiline
-          onChangeText={setMessage}
-          value={message}
-          placeholder="Type your message..."
-          style={styles.textArea}
-        />
-        <Button title="Send" onPress={sendMessage} />
-        <ThemedText type="subtitle">Broadcast Chat</ThemedText>
-        <FlatList
-          data={receivedMessages}
-          keyExtractor={(item, index) => `${index}-${item}`}
-          renderItem={({ item }) => <ThemedText>{item}</ThemedText>}
-        />
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={{ padding: 16 }}>
+            <ThemedText type="subtitle">Message</ThemedText>
+            <TextInput
+              multiline
+              onChangeText={setMessage}
+              value={message}
+              placeholder="Type your message..."
+              style={styles.textArea}
+            />
+            <Button title="Send" onPress={sendMessage} />
+            <ThemedText type="subtitle">Broadcast Chat</ThemedText>
+            {receivedMessages.map((msg, idx) => (
+              <ThemedText key={idx}>{msg}</ThemedText>
+            ))}
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
-
       <ThemedView style={styles.stepContainer}>
         <ThemedText type="subtitle">Step 1: Try it</ThemedText>
         <ThemedText>
