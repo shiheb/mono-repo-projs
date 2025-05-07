@@ -13,10 +13,7 @@ const io = new Server(server, {
 
 const connectedUsers = [];
 io.on("connection", (socket) => {
-  console.log(socket.id);
   connectedUsers.push(socket.id);
-  console.log({ connectedUsers });
-
   socket.on("disconnect", () => {
     connectedUsers.splice(connectedUsers.indexOf(socket.id), 1);
     console.log("disconnected", connectedUsers);
@@ -26,11 +23,17 @@ io.on("connection", (socket) => {
 io.on("connection", (socket) => {
   console.log("a user connected");
   setInterval(() => {
-    socket.emit("fromServer", {
+    socket.emit("liveUsers", {
       date: new Date(),
       usersNumber: connectedUsers.length,
     });
   }, 1000);
+});
+
+io.on("connection", (socket) => {
+  socket.on("fromClient", (message) => {
+    socket.broadcast.emit("fromServer", message);
+  });
 });
 
 require("dotenv").config();
