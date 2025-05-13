@@ -1,4 +1,5 @@
 {
   "cSpell.words": ["projs"],
-  "secret-stack.promptToScanBeforePush": "30days"
+  "secret-stack.promptToScanBeforePush": "30days",
+  "editor.formatOnSave": true
 }
