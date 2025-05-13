@@ -23,7 +23,6 @@ const resolvers = {
       if (!mongoose.Types.ObjectId.isValid(id)) {
         throw new Error('Invalid product ID format');
       }
-
       const product = await Widgets.findById(id);
       if (!product) {
         throw new Error('Product not found');
@@ -34,11 +33,17 @@ const resolvers = {
       throw new Error(`Failed to get product: ${error.message}`);
     }
   },
+  getAllProducts: async () => {
+    try {
+      return await Widgets.find({});
+    } catch (error) {
+      throw new Error(`Failed to get all products: ${error.message}`);
+    }
+  },
   createProduct: async ({ input }) => {
-    /*     let id = require('crypto').randomBytes(12).toString('hex'); */
-    const id = new mongoose.Types.ObjectId();
-    const newProduct = new Widgets({
-      _id: id,
+    /*  const id = require('crypto').randomBytes(12).toString('hex'); */
+    /*  const id = new mongoose.Types.ObjectId(); */
+    const newWidget = new Widgets({
       name: input.name,
       price: input.price,
       description: input.description,
@@ -46,13 +51,35 @@ const resolvers = {
       inventory: input.inventory,
       stores: input.stores,
     });
+    newWidget.id = newWidget._id;
 
-    await newProduct.save();
+    try {
+      await newWidget.save();
+      return newWidget;
+    } catch (error) {
+      throw new Error(`Failed to create product: ${error.message}`);
+    }
+  },
 
-    return {
-      id: id.toHexString(),
-      ...input,
-    };
+  updateProduct: async ({ input }) => {
+    try {
+      const updateWidget = await Widgets.findOneAndUpdate(
+        { _id: input.id },
+        input,
+        { new: true }
+      );
+      return updateWidget;
+    } catch (error) {
+      throw new Error(`Failed to update product: ${error.message}`);
+    }
+  },
+  deleteProduct: async ({ id }) => {
+    try {
+      await Widgets.deleteOne({ _id: id });
+      return 'successfully deleted widget';
+    } catch (error) {
+      throw new Error(`Failed to delete product: ${error.message}`);
+    }
   },
 };
 

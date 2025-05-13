@@ -1,4 +1,4 @@
-import { buildSchema } from "graphql";
+import { buildSchema } from 'graphql';
 
 const schema = buildSchema(`
       type Product {
@@ -19,12 +19,16 @@ const schema = buildSchema(`
 
         }
        type Query {
-         getProduct(id: ID): Product
+         getProduct(id: ID): Product   
+         getAllProducts: [Product]
        }
        type Mutation {
          createProduct(input: ProductInput): Product
+         updateProduct(input: ProductInput): Product
+         deleteProduct(id: ID!): String
        }
        input ProductInput {
+         id: ID
          name: String
          price: Float
          description: String
