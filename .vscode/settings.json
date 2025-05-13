@@ -1,3 +1,4 @@
 {
-  "cSpell.words": ["projs"]
+  "cSpell.words": ["projs"],
+  "secret-stack.promptToScanBeforePush": "30days"
 }

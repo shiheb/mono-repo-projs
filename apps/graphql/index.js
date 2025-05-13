@@ -1,6 +1,7 @@
 import express from "express";
 import { graphqlHTTP } from "express-graphql";
 import schema from "./data/schema";
+import resolvers from "./data/resolvers";  
 
 const PORT = 8080;
 const app = express();
@@ -13,17 +14,7 @@ app.listen(PORT, () =>
   console.log(`Server is running on port ${PORT}/graphql`)
 );
 
-const root = {
-  product: () => {
-    return {
-      id: 65465486,
-      name: "Widget",
-      price: 34.99,
-      description: "Beautiful widget to use in the garden",
-      soldout: false,
-    };
-  },
-};
+const root = resolvers;
 
 app.use(
   "/graphql",
