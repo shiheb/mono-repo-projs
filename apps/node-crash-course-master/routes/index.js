@@ -3,6 +3,7 @@ const router = express.Router();
 const blogRoutes = require('./blogRoutes');
 
 router.get('/', (req, res) => {
+  req.log.info('route app root');
   res.redirect('/about');
 });
 
