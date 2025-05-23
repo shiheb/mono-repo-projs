@@ -1,46 +1,50 @@
-const express = require("express");
+const express = require('express');
+const cors = require('cors');
+
+const http = require('http');
 const app = express();
 
-const http = require("http");
+app.use(cors());
+
 const server = http.createServer(app);
 
-const { Server } = require("socket.io");
+const { Server } = require('socket.io');
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: '*',
   },
 });
 
 const connectedUsers = [];
-io.on("connection", (socket) => {
-  console.log("a user connected");
-  connectedUsers.push({ id: socket.id, name: "", likedBy: [] });
-  socket.on("disconnect", () => {
+io.on('connection', (socket) => {
+  console.log('a user connected');
+  connectedUsers.push({ id: socket.id, name: '', likedBy: [] });
+  socket.on('disconnect', () => {
     const userIndex = connectedUsers.findIndex((user) => user.id === socket.id);
     connectedUsers.splice(userIndex, 1);
-    console.log("disconnected", connectedUsers);
+    console.log('disconnected', connectedUsers);
   });
   setInterval(() => {
-    socket.emit("liveUsers", {
+    socket.emit('liveUsers', {
       date: new Date(),
       usersNumber: connectedUsers.length,
     });
   }, 1000);
 
-  socket.on("fromClient", (message) => {
-    io.broadcast.emit("fromServer", message);
+  socket.on('fromClient', (message) => {
+    io.broadcast.emit('fromServer', message);
   });
 
-  socket.on("newUser", (userName) => {
+  socket.on('newUser', (userName) => {
     const userIndex = connectedUsers.findIndex((user) => user.id === socket.id);
     if (userIndex !== -1) {
       connectedUsers[userIndex].name = userName;
     } else connectedUsers.push({ id: socket.id, name: userName, likedBy: [] });
     console.log({ connectedUsers });
-    io.emit("connectedUsers", connectedUsers);
+    io.emit('connectedUsers', connectedUsers);
   });
 
-  socket.on("like", (recipient, sender) => {
+  socket.on('like', (recipient, sender) => {
     const recipientIndex = connectedUsers.findIndex(
       (user) => user.name === recipient
     );
@@ -52,11 +56,11 @@ io.on("connection", (socket) => {
     }
     socket
       .to(connectedUsers[recipientIndex].id)
-      .emit("connectedUsers", connectedUsers);
+      .emit('connectedUsers', connectedUsers);
   });
 });
 
-require("dotenv").config();
+require('dotenv').config();
 const PORT = process.env.PORT || 4545;
 
 server.listen(PORT, () => {
