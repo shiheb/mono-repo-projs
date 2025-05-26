@@ -21,25 +21,28 @@ jobs:
           fetch-depth: 0
       - name: Install build dependencies
         run: |
-          apt-get update && apt-get install -y cmake build-essential
+          apt-get update && apt-get install -y cmake build-essential git
+
+      - name: Clone llama.cpp
+        run: |
+          git clone https://github.com/ggml-org/llama.cpp.git /llama.cpp
+
+      - name: Build llama.cpp
+        run: |
+          cd /llama.cpp
+          mkdir -p build
+          cd build
+          cmake ..
+          make -j$(nproc)
 
       - name: Download model (Mistral 7B)
         run: |
           mkdir -p /models/
           curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
             -o /models/mistral.gguf
-      - name: Build llama.cpp
-        run: |
-          cd /app  # or wherever the llama.cpp source code is located inside the container
-          mkdir -p build
-          cd build
-          cmake ..
-          make -j$(nproc)
+
       - name: Locate `main` binary
-        run: |
-          find / -name main -type f -executable 2>/dev/null
-      - name: Locate llama.cpp
-        run: find / -type d -name llama.cpp 2>/dev/null
+        run: find / -name main -type f -executable 2>/dev/null
       - name: Generate diff summary
         id: llm-summary
         run: |
