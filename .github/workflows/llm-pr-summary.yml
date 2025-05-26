@@ -22,7 +22,11 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          apt-get update && apt-get install -y cmake build-essential git libcurl4-openssl-dev
+          apt-get update && apt-get install -y \
+            cmake \
+            build-essential \
+            git \
+            libcurl4-openssl-dev
 
       - name: Clone llama.cpp
         run: |
@@ -40,7 +44,7 @@ jobs:
           curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
             -o /models/mistral.gguf
 
-      - name: Locate `llama-cli` binary
+      - name: Locate llama-cli binary
         id: locate-cli
         run: |
           CLI_PATH=$(find /llama.cpp/build -type f -name llama-cli -executable | head -n 1)
@@ -60,59 +64,63 @@ jobs:
           BASE_SHA=${{ github.event.pull_request.base.sha }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
-          # Get clean diff with relevant context
-          RAW_DIFF=$(git diff -U5 "$BASE_SHA" "$HEAD_SHA" | head -c 6000)
-          CLEAN_DIFF=$(echo "$RAW_DIFF" | grep -vE '^diff --git|^index |^--- |^\+\+\+ |^@@ ' | grep -vE '^[-+]$' | grep -vE '^[-+]\s*$')
+          # Get clean diff with context
+          RAW_DIFF=$(git diff -U10 "$BASE_SHA" "$HEAD_SHA" | head -c 10000)
+          CLEAN_DIFF=$(echo "$RAW_DIFF" | \
+            grep -vE '^diff --git|^index |^--- |^\+\+\+ |^@@ ' | \
+            grep -vE '^[-+]$' | \
+            grep -vE '^[-+]\s*$')
 
-          PROMPT="[INST] <<SYS>>
-          You are a senior software engineer reviewing GitHub pull requests. Analyze these changes:
-
-          1. Identify the PR's main objective
-          2. List 3-5 specific technical changes
-          3. Note any potential impacts
+          # Create focused prompt
+          PROMPT=$(cat <<EOF
+          [INST] <<SYS>>
+          Analyze these code changes and provide:
+          1. One sentence describing the main purpose
+          2. 3-5 bullet points of key technical changes
+          3. One line about potential impact
+          Return ONLY the factual analysis without instructions.
           <</SYS>>
 
-          Format requirements:
-          - No instructions repetition
-          - No markdown formatting
-          - Only factual observations
-          - Maximum 5 bullet points
+          Code changes:
+          $CLEAN_DIFF
+          [/INST]
+          Analysis:
+          EOF
+          )
 
-          Here are the changes:
-          $CLEAN_DIFF[/INST]"
+          MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
 
-              MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
-              
-              # Get raw LLM response
-              RAW_OUTPUT=$("$MAIN_BIN" \
-                -m /models/mistral.gguf \
-                -t 4 \
-                --temp 0.4 \
-                --ctx-size 2048 \
-                --n-predict 256 \
-                --repeat-penalty 1.1 \
-                --prompt "$PROMPT")
+          # Get and clean the output
+          RAW_OUTPUT=$("$MAIN_BIN" \
+            -m /models/mistral.gguf \
+            -t 4 \
+            --temp 0.3 \
+            --ctx-size 2048 \
+            --n-predict 300 \
+            --repeat-penalty 1.2 \
+            --prompt "$PROMPT")
 
-              # Clean the output
-              CLEAN_OUTPUT=$(echo "$RAW_OUTPUT" | \
-                grep -vE '\[INST\]|<<SYS>>|You are a|Format requirements|Here are the changes' | \
-                head -n 5 | \
-                sed '/^$/d')
+          # Extract only the analysis part
+          ANALYSIS=$(echo "$RAW_OUTPUT" | \
+            sed -n '/Analysis:/,$p' | \
+            sed 's/Analysis://' | \
+            head -n 6 | \
+            sed '/^$/d')
 
-              {
-                echo "SUMMARY<<EOF"
-                echo "### 🤖 Technical PR Analysis"
-                echo "$CLEAN_OUTPUT"
-                echo "EOF"
-              } >> $GITHUB_OUTPUT
+          {
+            echo "SUMMARY<<EOF"
+            echo "### 🤖 PR Analysis"
+            echo "$ANALYSIS"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            ### 🤖 Technical PR Analysis
+            ### 🤖 Automated PR Analysis
             ${{ steps.llm-summary.outputs.SUMMARY }}
 
-            _Summary generated from code changes at $(date -u)_
+            _Generated from code changes at $(date +"%Y-%m-%d %H:%M %Z")_
           edit-mode: replace
