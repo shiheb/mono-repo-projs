@@ -43,9 +43,6 @@ jobs:
       - name: Locate `llama-cli` binary
         id: locate-cli
         run: |
-          echo "Listing all executables in build dir..."
-          find /llama.cpp/build -type f -executable -exec ls -l {} \;
-
           CLI_PATH=$(find /llama.cpp/build -type f -name llama-cli -executable | head -n 1)
           echo "Found llama-cli binary at: $CLI_PATH"
           if [ -z "$CLI_PATH" ]; then
@@ -63,11 +60,9 @@ jobs:
           BASE_SHA=${{ github.event.pull_request.base.sha }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
-          # Capture and clean diff
           RAW_DIFF=$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" | head -c 5450)
           CLEAN_DIFF=$(echo "$RAW_DIFF" | grep -vE '^diff --git|^index |^--- |^\+\+\+ |^@@ ')
 
-          # Refined flat prompt (no INST tags)
           PROMPT="You're a senior AI code reviewer.
           Please summarize the following GitHub code changes.
 
@@ -98,12 +93,16 @@ jobs:
             --n-predict 512 \
             --prompt "$PROMPT")
 
-          # Format nicely
-          echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
-          echo -e "## 📝 PR Summary by Local LLM\n\n$SUMMARY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "SUMMARY<<EOF"
+            echo "## 📝 PR Summary by Local LLM"
+            echo
+            echo "$SUMMARY"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
           echo "$SUMMARY"
+
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
         with:
@@ -113,5 +112,6 @@ jobs:
 
             ${{ steps.llm-summary.outputs.SUMMARY }}
 
-            *Generated on GitHub Actions runner*
+            ---
+            _Generated on GitHub Actions runner_
           edit-mode: replace
