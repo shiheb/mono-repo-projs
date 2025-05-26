@@ -43,6 +43,9 @@ jobs:
       - name: Locate `llama-cli` binary
         id: locate-cli
         run: |
+          echo "Listing all executables in build dir..."
+          find /llama.cpp/build -type f -executable -exec ls -l {} \;
+
           CLI_PATH=$(find /llama.cpp/build -type f -name llama-cli -executable | head -n 1)
           echo "Found llama-cli binary at: $CLI_PATH"
           if [ -z "$CLI_PATH" ]; then
@@ -56,52 +59,47 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git status || { echo "❌ Not a git repo"; exit 1; }
 
           BASE_SHA=${{ github.event.pull_request.base.sha }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
-          RAW_DIFF=$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" | head -c 5450)
-          CLEAN_DIFF=$(echo "$RAW_DIFF" | grep -vE '^diff --git|^index |^--- |^\+\+\+ |^@@ ')
+          # Extract and trim the unified diff (safe for LLM input)
+          DIFF_CONTENT=$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" | head -c 5450)
 
-          PROMPT="You're a senior AI code reviewer.
-          Please summarize the following GitHub code changes.
+          # Craft a refined prompt for better summarization
+          PROMPT="🤖 Local LLM Pull Request Summary
+          [INST]
+          Analyze the following code changes with a focus on:
+          1. **Main Purpose** – What does this PR aim to achieve?
+          2. **Key Code Changes** – List the major technical changes.
+          3. **Impact** – Any functional, performance, or architectural implications.
 
-          **Include**:
-          - Purpose of this PR
-          - Key technical changes
-          - Any architectural or functional impact
+          Only summarize the code changes — do NOT include raw diffs, workflow steps, or unrelated metadata. Keep it clear, technical, and under 500 words.
 
-          **Do NOT include**:
-          - Raw code snippets
-          - File paths
-          - GitHub Actions workflow details
+          ${DIFF_CONTENT}
+          [/INST]"
 
-          Changes:
-          $CLEAN_DIFF"
+              MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
+              if [ ! -x "$MAIN_BIN" ]; then
+                echo "❌ llama-cli binary not executable or missing at $MAIN_BIN"
+                exit 1
+              fi
 
-          MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
-          if [ ! -x "$MAIN_BIN" ]; then
-            echo "❌ llama-cli binary not executable or missing at $MAIN_BIN"
-            exit 1
-          fi
+              SUMMARY=$("$MAIN_BIN" \
+                -m /models/mistral.gguf \
+                --temp 0.7 \
+                --ctx-size 2048 \
+                --keep -1 \
+                --n-predict 512 \
+                --prompt "$PROMPT")
 
-          SUMMARY=$("$MAIN_BIN" \
-            -m /models/mistral.gguf \
-            --temp 0.7 \
-            --ctx-size 2048 \
-            --keep -1 \
-            --n-predict 512 \
-            --prompt "$PROMPT")
+              # Bonus formatting: Wrap summary in a section with emoji and Markdown
+              echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
+              echo -e "## 📝 PR Summary by Local LLM\n\n$SUMMARY" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
 
-          {
-            echo "SUMMARY<<EOF"
-            echo "## 📝 PR Summary by Local LLM"
-            echo
-            echo "$SUMMARY"
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
-
-          echo "$SUMMARY"
+              echo "$SUMMARY"
 
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
@@ -112,6 +110,5 @@ jobs:
 
             ${{ steps.llm-summary.outputs.SUMMARY }}
 
-            ---
-            _Generated on GitHub Actions runner_
+            *Generated on GitHub Actions runner*
           edit-mode: replace
