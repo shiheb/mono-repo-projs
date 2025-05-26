@@ -64,17 +64,22 @@ jobs:
           BASE_SHA=${{ github.event.pull_request.base.sha }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
+          # Get the diff
           DIFF_CONTENT=$(git diff --unified=1 "$BASE_SHA" "$HEAD_SHA")
+
+          # Limit to ~6000 characters (~2000 tokens safe estimate)
+          MAX_CHARS=6000
+          TRUNCATED_DIFF=$(echo "$DIFF_CONTENT" | head -c $MAX_CHARS)
+
           PROMPT="[INST] Analyze these code changes for a pull request. \
           Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
-          Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
+          Be concise but technical.\n\n${TRUNCATED_DIFF}[/INST]"
 
           MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
           if [ ! -x "$MAIN_BIN" ]; then
             echo "❌ llama-cli binary not executable or missing at $MAIN_BIN"
             exit 1
           fi
-          echo "PROMPT: $PROMPT"
 
           SUMMARY=$("$MAIN_BIN" \
             -m /models/mistral.gguf \
@@ -89,7 +94,6 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
           echo "$SUMMARY"
-
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
         with:
