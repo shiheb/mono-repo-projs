@@ -19,6 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          path: repo
       - name: Install wget
         run: |
           apt-get update && apt-get install -y wget
@@ -30,15 +31,13 @@ jobs:
       - name: Generate diff summary
         id: llm-summary
         run: |
-          # Get formatted diff
+          cd repo  # Enter the checked-out repo directory
           DIFF_CONTENT=$(git diff --unified=1 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
 
-          # Create prompt
           PROMPT="[INST] Analyze these code changes for a pull request. \
           Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
           Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
 
-          # Run inference (4-bit quantized)
           SUMMARY=$(echo "$PROMPT" | llama.cpp \
             --model /models/mistral.gguf \
             --temp 0.7 \
