@@ -1,0 +1,37 @@
+name: Auto PR Description
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  generate-description:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get PR Diff
+        id: git-diff
+        run: |
+          git diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > changes.diff
+          echo "DIFF=$(cat changes.diff | jq -sR)" >> $GITHUB_OUTPUT
+      - name: Call DeepSeek API
+        id: deepseek
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
+            -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+                "model": "deepseek-chat",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Summarize these code changes for a PR description:\n\n${{ steps.git-diff.outputs.DIFF }}"
+                    }
+                ]
+            }')
+          echo "SUMMARY=$(echo $RESPONSE | jq -r '.choices[0].message.content')" >> $GITHUB_OUTPUT
+      - name: Update PR Description
+        uses: peter-evans/commit-comment@v2
+        with:
+          body: "### AI-Generated PR Summary\n\n${{ steps.deepseek.outputs.SUMMARY }}"
