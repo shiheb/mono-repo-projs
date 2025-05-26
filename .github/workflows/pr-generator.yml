@@ -20,19 +20,32 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
-          RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
-            -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+          # Escape the diff content for JSON
+          DIFF_JSON=$(jq -Rs . <<< "${{ steps.git-diff.outputs.DIFF }}")
+
+          # Create the properly formatted JSON payload
+          PAYLOAD=$(jq -n \
+          --arg model "deepseek-chat" \
+          --arg content "Summarize these code changes for a PR description:\n\n$DIFF_JSON" \
+          '{
+           "model": $model,
+           "messages": [
+               {
+                "role": "user",
+               "content": $content
+               }
+            ]
+          }')
+
+          # Make the API call
+           RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
+           -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{
-                "model": "deepseek-chat",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Summarize these code changes for a PR description:\n\n${{ steps.git-diff.outputs.DIFF }}"
-                    }
-                ]
-            }')
-          echo "SUMMARY=$(echo $RESPONSE | jq -r '.choices[0].message.content')" >> $GITHUB_OUTPUT
+            -d "$PAYLOAD")
+
+          # Extract and output the summary
+          echo "SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')" >> $GITHUB_OUTPUT
+
       - name: Update PR Description
         uses: peter-evans/commit-comment@v2
         with:
