@@ -64,34 +64,42 @@ jobs:
           BASE_SHA=${{ github.event.pull_request.base.sha }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
-          # Get the diff and limit it to ~6000 characters (safe for ~2000 tokens)
-          DIFF_CONTENT=$(git diff --unified=1 "$BASE_SHA" "$HEAD_SHA")
-          MAX_CHARS=5500
-          TRUNCATED_DIFF=$(echo "$DIFF_CONTENT" | head -c $MAX_CHARS)
+          # Extract and trim the unified diff (safe for LLM input)
+          DIFF_CONTENT=$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" | head -c 5500)
 
-          PROMPT="[INST] Analyze these code changes for a pull request. \
-          Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
-          Be concise but technical.\n\n${TRUNCATED_DIFF}[/INST]"
+          # Craft a refined prompt for better summarization
+          PROMPT="🤖 Local LLM Pull Request Summary
+          [INST]
+          Analyze the following code changes with a focus on:
+          1. **Main Purpose** – What does this PR aim to achieve?
+          2. **Key Code Changes** – List the major technical changes.
+          3. **Impact** – Any functional, performance, or architectural implications.
 
-          MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
-          if [ ! -x "$MAIN_BIN" ]; then
-            echo "❌ llama-cli binary not executable or missing at $MAIN_BIN"
-            exit 1
-          fi
+          Only summarize the code changes — do NOT include raw diffs, workflow steps, or unrelated metadata. Keep it clear, technical, and under 500 words.
 
-          SUMMARY=$("$MAIN_BIN" \
-            -m /models/mistral.gguf \
-            --temp 0.7 \
-            --ctx-size 2048 \
-            --keep -1 \
-            --n-predict 512 \
-            --prompt "$PROMPT")
+          ${DIFF_CONTENT}
+          [/INST]"
 
-          echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
-          echo "$SUMMARY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+              MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
+              if [ ! -x "$MAIN_BIN" ]; then
+                echo "❌ llama-cli binary not executable or missing at $MAIN_BIN"
+                exit 1
+              fi
 
-          echo "$SUMMARY"
+              SUMMARY=$("$MAIN_BIN" \
+                -m /models/mistral.gguf \
+                --temp 0.7 \
+                --ctx-size 2048 \
+                --keep -1 \
+                --n-predict 512 \
+                --prompt "$PROMPT")
+
+              # Bonus formatting: Wrap summary in a section with emoji and Markdown
+              echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
+              echo -e "## 📝 PR Summary by Local LLM\n\n$SUMMARY" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+
+              echo "$SUMMARY"
 
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
