@@ -13,8 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/ggml-org/llama.cpp:full
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -27,32 +29,18 @@ jobs:
       - name: Generate diff summary
         id: llm-summary
         run: |
-          # Set working directory to repository root
-          cd "${GITHUB_WORKSPACE}"
+          # Ensure we're in a Git repo
+          cd "$GITHUB_WORKSPACE"
+          git status || { echo "❌ Not a git repo"; exit 1; }
 
-          # Verify git repository
-          if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            echo "Error: Not in a git repository"
-            exit 1
-          fi
-
-          # Get the base and head commits
           BASE_SHA=${{ github.event.pull_request.base.sha }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
-          # Get formatted diff
-          DIFF_CONTENT=$(git diff --unified=1 "${BASE_SHA}" "${HEAD_SHA}")
-          if [ $? -ne 0 ]; then
-            echo "Error: Failed to generate diff"
-            exit 1
-          fi
-
-          # Create prompt
+          DIFF_CONTENT=$(git diff --unified=1 "$BASE_SHA" "$HEAD_SHA")
           PROMPT="[INST] Analyze these code changes for a pull request. \
           Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
           Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
 
-          # Run inference (4-bit quantized)
           SUMMARY=$(echo "$PROMPT" | ./main \
             -m /models/mistral.gguf \
             --temp 0.7 \
