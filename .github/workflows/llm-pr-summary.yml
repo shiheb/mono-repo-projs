@@ -72,39 +72,39 @@ jobs:
             sed '/^\s*$/d')
 
           PROMPT=$(cat <<EOF
-[INST] <<SYS>>
-Analyze these code changes and provide:
-1. One sentence describing the main purpose
-2. 3-5 bullet points of key technical changes
-3. One line about potential impact
-Return ONLY the factual analysis without instructions.
-<</SYS>>
+          [INST] <<SYS>>
+          Analyze these code changes and provide:
+          1. One sentence describing the main purpose
+          2. 3-5 bullet points of key technical changes
+          3. One line about potential impact
+          Return ONLY the factual analysis without instructions.
+          <</SYS>>
 
-Code changes:
-$CLEAN_DIFF
-[/INST]
-EOF
-          )
+          Code changes:
+          $CLEAN_DIFF
+          [/INST]
+          EOF
+                    )
 
-          MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
+                    MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
 
-          RAW_OUTPUT=$("$MAIN_BIN" \
-            -m /models/mistral.gguf \
-            -t 4 \
-            --temp 0.3 \
-            --ctx-size 2048 \
-            --n-predict 500 \
-            --repeat-penalty 1.2 \
-            --prompt "$PROMPT")
+                    RAW_OUTPUT=$("$MAIN_BIN" \
+                      -m /models/mistral.gguf \
+                      -t 4 \
+                      --temp 0.3 \
+                      --ctx-size 2048 \
+                      --n-predict 500 \
+                      --repeat-penalty 1.2 \
+                      --prompt "$PROMPT")
 
-          ANALYSIS=$(echo "$RAW_OUTPUT" | tail -n +2 | sed '/^$/d')
+                    ANALYSIS=$(echo "$RAW_OUTPUT" | tail -n +2 | sed '/^$/d')
 
-          {
-            echo "SUMMARY<<EOF"
-            echo "### 🤖 PR Analysis"
-            echo "$ANALYSIS"
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
+                    {
+                      echo "SUMMARY<<EOF"
+                      echo "### 🤖 PR Analysis"
+                      echo "$ANALYSIS"
+                      echo "EOF"
+                    } >> $GITHUB_OUTPUT
 
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
