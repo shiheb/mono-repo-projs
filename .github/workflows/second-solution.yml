@@ -1,0 +1,28 @@
+name: AI PR Description
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  suggest-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Trigger GitHub AI Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // This creates a minimal comment to activate GitHub's native AI
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: "✨ Please use GitHub's 'Generate summary' button above for an AI-powered description of these changes."
+            });
