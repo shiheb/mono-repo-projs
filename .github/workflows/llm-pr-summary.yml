@@ -61,7 +61,7 @@ jobs:
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
           # Get clean diff without metadata
-          RAW_DIFF=$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" | head -c 7000)
+          RAW_DIFF=$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" | head -c 6000)
           CLEAN_DIFF=$(echo "$RAW_DIFF" | grep -vE '^diff --git|^index |^--- |^\+\+\+ |^@@ ' | grep -vE '^[-+]$' | grep -vE '^[-+]\s*$')
 
           PROMPT="You are an expert code reviewer analyzing a GitHub pull request. 
