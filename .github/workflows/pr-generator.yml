@@ -1,4 +1,4 @@
-name: Auto PR Description
+name: Deepseek Auto PR Description
 
 on:
   pull_request:

@@ -20,19 +20,39 @@ jobs:
         id: git-diff
         run: |
           git diff "${{ github.event.pull_request.base.sha }}".."${{ github.event.pull_request.head.sha }}" > changes.diff
-          DIFF=$(cat changes.diff | jq -sR)
-          echo "DIFF=$DIFF" >> $GITHUB_OUTPUT
+          echo "DIFF<<EOF" >> $GITHUB_OUTPUT
+          cat changes.diff >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create PR Summary Comment
         uses: actions/github-script@v6
         with:
           script: |
-            const diffContent = `${{ steps.git-diff.outputs.DIFF }}`;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: "GitHub's AI will automatically show a summary option above this comment.\n\n" +
-                    "For reference, here are the changed files:\n" +
-                    diffContent.split('\n').filter(line => line.startsWith('+++') || line.startsWith('---')).join('\n')
-            });
+            try {
+              // Get raw diff output
+              const diffContent = `${{ steps.git-diff.outputs.DIFF }}`;
+              
+              // Extract just the changed files list
+              const changedFiles = diffContent.split('\n')
+                .filter(line => line.startsWith('+++ b/') || line.startsWith('--- a/'))
+                .map(line => line.replace('+++ b/', '').replace('--- a/', ''))
+                .filter((value, index, self) => self.indexOf(value) === index);
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: "GitHub's AI will automatically show a summary option above this comment.\n\n" +
+                      "### Changed Files\n" +
+                      changedFiles.map(file => `- ${file}`).join('\n')
+              });
+            } catch (error) {
+              core.error("Failed to create comment: " + error.message);
+              // Fallback to simple comment if parsing fails
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: "GitHub's AI summary will appear above this comment."
+              });
+            }
