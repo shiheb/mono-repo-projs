@@ -30,10 +30,8 @@ jobs:
       - name: Build llama.cpp
         run: |
           cd /llama.cpp
-          mkdir -p build && cd build
-          cmake .. -DLLAMA_BUILD_EXAMPLES=ON
-          make main -j$(nproc)
-
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release -j$(nproc)
       - name: Download model (Mistral 7B)
         run: |
           mkdir -p /models/
