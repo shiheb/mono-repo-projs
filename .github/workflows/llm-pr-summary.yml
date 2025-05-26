@@ -3,7 +3,9 @@ name: Local LLM PR Summary
 on:
   pull_request:
     types: [opened, synchronize]
-
+permissions:
+  contents: read
+  pull-requests: write
 jobs:
   generate-summary:
     runs-on: ubuntu-latest
@@ -14,7 +16,9 @@ jobs:
         with:
           fetch-depth: 0
           path: repo
-
+      - name: Install wget
+        run: |
+          apt-get update && apt-get install -y wget
       - name: Download model (Mistral 7B)
         run: |
           mkdir -p ~/models/
