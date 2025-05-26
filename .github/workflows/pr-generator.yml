@@ -31,7 +31,7 @@ jobs:
               messages: [
                 {
                   role: "user",
-                  content: "Summarize these code changes for a PR description:\n\n" + $diff
+                  content: "Summarize these code changes for a PR description:\n\n\($diff)"
                 }
               ]
             }
