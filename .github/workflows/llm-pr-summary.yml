@@ -3,9 +3,11 @@ name: Local LLM PR Summary
 on:
   pull_request:
     types: [opened, synchronize]
+
 permissions:
   contents: read
   pull-requests: write
+
 jobs:
   generate-summary:
     runs-on: ubuntu-latest
@@ -24,9 +26,7 @@ jobs:
           mkdir -p ~/models/
           wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
             -O ~/models/mistral.gguf
-      - name: Find llama.cpp executable
-        run: |
-          find / -name "main" -o -name "llama" 2>/dev/null || echo "No llama.cpp binary found"
+
       - name: Generate diff summary
         id: llm-summary
         run: |
@@ -37,7 +37,7 @@ jobs:
           Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
           Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
 
-          SUMMARY=$(echo "$PROMPT" | ./main \
+          SUMMARY=$(echo "$PROMPT" | /llama.cpp/build/bin/main \
             --model ~/models/mistral.gguf \
             --temp 0.7 \
             --ctx-size 2048 \
