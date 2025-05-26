@@ -40,19 +40,19 @@ jobs:
           curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
             -o /models/mistral.gguf
 
-      - name: Locate `main` binary
-        id: locate-main
+      - name: Locate `llama-cli` binary
+        id: locate-cli
         run: |
-          echo "Listing all files in build dir..."
-          find /llama.cpp/build -type f -exec ls -l {} \;
+          echo "Listing all executables in build dir..."
+          find /llama.cpp/build -type f -executable -exec ls -l {} \;
 
-          MAIN_PATH=$(find /llama.cpp/build -name main -type f -executable | head -n 1)
-          echo "Found main binary at: $MAIN_PATH"
-          if [ -z "$MAIN_PATH" ]; then
-            echo "❌ main binary not found"
+          CLI_PATH=$(find /llama.cpp/build -type f -name llama-cli -executable | head -n 1)
+          echo "Found llama-cli binary at: $CLI_PATH"
+          if [ -z "$CLI_PATH" ]; then
+            echo "❌ llama-cli binary not found"
             exit 1
           fi
-          echo "main-path=$MAIN_PATH" >> $GITHUB_OUTPUT
+          echo "main-path=$CLI_PATH" >> $GITHUB_OUTPUT
 
       - name: Generate diff summary
         id: llm-summary

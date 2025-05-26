@@ -1,0 +1,73 @@
+name: Second Try
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  generate-summary:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ggml-org/llama.cpp:full
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download model
+        run: |
+          mkdir -p /models/
+          curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
+            -o /models/mistral.gguf
+
+      - name: Get diff outside container
+        id: get-diff
+        run: |
+          # Use the GitHub API to get the diff
+          DIFF_CONTENT=$(curl -s \
+            -H "Authorization: token ${{ github.token }}" \
+            -H "Accept: application/vnd.github.v3.diff" \
+            "${{ github.event.pull_request.diff_url }}")
+
+          # Properly escape the content
+          DIFF_CONTENT="${DIFF_CONTENT//'%'/'%25'}"
+          DIFF_CONTENT="${DIFF_CONTENT//$'\n'/'%0A'}"
+          DIFF_CONTENT="${DIFF_CONTENT//$'\r'/'%0D'}"
+          echo "DIFF_CONTENT=${DIFF_CONTENT}" >> $GITHUB_ENV
+
+      - name: Generate summary
+        id: llm-summary
+        run: |
+          # Create prompt with the diff content
+          PROMPT="[INST] Analyze these code changes for a pull request. \
+          Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
+          Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
+
+          # Run inference
+          SUMMARY=$(echo "$PROMPT" | ./main \
+            -m /models/mistral.gguf \
+            --temp 0.7 \
+            --ctx-size 2048 \
+            --keep -1 \
+            --n-predict 512)
+
+          echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Post summary
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ### 🤖 Local LLM Analysis (Mistral 7B)
+
+            ${{ steps.llm-summary.outputs.SUMMARY }}
+
+            *Generated on GitHub Actions runner*
+          edit-mode: replace
