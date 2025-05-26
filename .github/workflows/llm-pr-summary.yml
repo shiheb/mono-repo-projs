@@ -17,6 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Download model (Mistral 7B)
         run: |
           mkdir -p /models/
@@ -26,8 +27,25 @@ jobs:
       - name: Generate diff summary
         id: llm-summary
         run: |
+          # Set working directory to repository root
+          cd "${GITHUB_WORKSPACE}"
+
+          # Verify git repository
+          if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            echo "Error: Not in a git repository"
+            exit 1
+          fi
+
+          # Get the base and head commits
+          BASE_SHA=${{ github.event.pull_request.base.sha }}
+          HEAD_SHA=${{ github.event.pull_request.head.sha }}
+
           # Get formatted diff
-          DIFF_CONTENT=$(git diff --unified=1 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+          DIFF_CONTENT=$(git diff --unified=1 "${BASE_SHA}" "${HEAD_SHA}")
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to generate diff"
+            exit 1
+          fi
 
           # Create prompt
           PROMPT="[INST] Analyze these code changes for a pull request. \
