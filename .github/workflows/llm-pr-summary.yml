@@ -11,8 +11,6 @@ permissions:
 jobs:
   generate-summary:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/ggerganov/llama.cpp:full
 
     steps:
       - uses: actions/checkout@v4
@@ -20,9 +18,10 @@ jobs:
           fetch-depth: 0
           path: repo
 
-      - name: Install wget and build tools
+      - name: Install system dependencies
         run: |
-          apt-get update && apt-get install -y wget cmake build-essential
+          sudo apt-get update && sudo apt-get install -y \
+            wget cmake build-essential git
 
       - name: Download model (Mistral 7B)
         run: |
@@ -30,10 +29,11 @@ jobs:
           wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
             -O ~/models/mistral.gguf
 
-      - name: Build llama.cpp
+      - name: Clone and build llama.cpp
         run: |
-          cd /llama.cpp
-          mkdir -p build && cd build
+          git clone https://github.com/ggerganov/llama.cpp.git
+          cd llama.cpp
+          mkdir build && cd build
           cmake ..
           make -j$(nproc)
 
@@ -49,7 +49,7 @@ jobs:
 
           echo "$PROMPT" > /tmp/prompt.txt
 
-          /llama.cpp/build/bin/main \
+          ../llama.cpp/build/bin/main \
             -m ~/models/mistral.gguf \
             --temp 0.7 \
             --ctx-size 2048 \
@@ -57,10 +57,8 @@ jobs:
             --n-predict 512 \
             -f /tmp/prompt.txt > /tmp/summary.txt
 
-          SUMMARY=$(cat /tmp/summary.txt)
-
           echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
-          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          cat /tmp/summary.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Post summary
