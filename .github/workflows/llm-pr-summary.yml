@@ -65,7 +65,7 @@ jobs:
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
           # Get clean diff with context
-          RAW_DIFF=$(git diff -U10 "$BASE_SHA" "$HEAD_SHA" | head -c 6600)
+          RAW_DIFF=$(git diff -U10 "$BASE_SHA" "$HEAD_SHA" | head -c 6500)
           CLEAN_DIFF=$(echo "$RAW_DIFF" | \
             grep -vE '^diff --git|^index |^--- |^\+\+\+ |^@@ ' | \
             grep -vE '^[-+]$' | \
