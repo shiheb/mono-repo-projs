@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     container:
       #image: ghcr.io/llama-cpp/llama-cpp:latest
-      image: ghcr.io/ggerganov/llama.cpp:full
-      #image: ghcr.io/ggerganov/llama.cpp:latest
+      #image: ghcr.io/ggerganov/llama.cpp:full
+      image: ghcr.io/ggerganov/llama.cpp:latest
     steps:
       - uses: actions/checkout@v4
         with:
