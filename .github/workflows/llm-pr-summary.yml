@@ -60,59 +60,59 @@ jobs:
           BASE_SHA=${{ github.event.pull_request.base.sha }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
-          # Get clean diff without metadata
-          RAW_DIFF=$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" | head -c 6000)
+          # Get clean diff with relevant context
+          RAW_DIFF=$(git diff -U5 "$BASE_SHA" "$HEAD_SHA" | head -c 6000)
           CLEAN_DIFF=$(echo "$RAW_DIFF" | grep -vE '^diff --git|^index |^--- |^\+\+\+ |^@@ ' | grep -vE '^[-+]$' | grep -vE '^[-+]\s*$')
 
-          PROMPT="You are an expert code reviewer analyzing a GitHub pull request. 
-          Provide a concise technical summary (3-5 bullet points) focusing on:
+          PROMPT="[INST] <<SYS>>
+          You are a senior software engineer reviewing GitHub pull requests. Analyze these changes:
 
-          - The primary purpose of these changes
-          - Key technical modifications (architecture, logic, dependencies)
-          - Potential impact on the system
+          1. Identify the PR's main objective
+          2. List 3-5 specific technical changes
+          3. Note any potential impacts
+          <</SYS>>
 
           Format requirements:
-          - Maximum 200 words
-          - No raw code snippets
-          - No file paths
-          - No workflow implementation details
-          - No repeated information
-          - Use clear, professional language
+          - No instructions repetition
+          - No markdown formatting
+          - Only factual observations
+          - Maximum 5 bullet points
 
-          Changes to analyze:
-          $CLEAN_DIFF"
+          Here are the changes:
+          $CLEAN_DIFF[/INST]"
 
-          MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
-          if [ ! -x "$MAIN_BIN" ]; then
-            echo "❌ llama-cli binary not executable or missing at $MAIN_BIN"
-            exit 1
-          fi
+              MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
+              
+              # Get raw LLM response
+              RAW_OUTPUT=$("$MAIN_BIN" \
+                -m /models/mistral.gguf \
+                -t 4 \
+                --temp 0.4 \
+                --ctx-size 2048 \
+                --n-predict 256 \
+                --repeat-penalty 1.1 \
+                --prompt "$PROMPT")
 
-          SUMMARY=$("$MAIN_BIN" \
-            -m /models/mistral.gguf \
-            -t 4 \
-            --temp 0.5 \
-            --ctx-size 2048 \
-            --keep -1 \
-            --n-predict 384 \
-            --repeat-penalty 1.1 \
-            --prompt "$PROMPT")
+              # Clean the output
+              CLEAN_OUTPUT=$(echo "$RAW_OUTPUT" | \
+                grep -vE '\[INST\]|<<SYS>>|You are a|Format requirements|Here are the changes' | \
+                head -n 5 | \
+                sed '/^$/d')
 
-          {
-            echo "SUMMARY<<EOF"
-            echo "### 🤖 LLM PR Analysis"
-            echo "$SUMMARY" | grep -vE '^Main Purpose:|^Key Changes:|^Impact:' | head -n 8
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
+              {
+                echo "SUMMARY<<EOF"
+                echo "### 🤖 Technical PR Analysis"
+                echo "$CLEAN_OUTPUT"
+                echo "EOF"
+              } >> $GITHUB_OUTPUT
 
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            ### 🤖 Concise PR Analysis
-
+            ### 🤖 Technical PR Analysis
             ${{ steps.llm-summary.outputs.SUMMARY }}
 
-            _AI-generated summary based on code changes_
+            _Summary generated from code changes at $(date -u)_
           edit-mode: replace
