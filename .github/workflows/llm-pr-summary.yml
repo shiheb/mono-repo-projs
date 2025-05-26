@@ -48,17 +48,17 @@ jobs:
           DIFF_CONTENT="$(git diff --unified=1 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})"
 
           PROMPT=$(cat <<EOF
-            [INST] Analyze these code changes for a pull request.
-            Focus on:
-            1) Main purpose
-            2) Key changes
-            3) Potential impacts
+          [INST] Analyze these code changes for a pull request.
+          Focus on:
+          1) Main purpose
+          2) Key changes
+          3) Potential impacts
 
-            Be concise but technical.
+          Be concise but technical.
 
-            ${DIFF_CONTENT}
-            [/INST]
-            EOF
+          ${DIFF_CONTENT}
+          [/INST]
+          EOF
           )
 
           echo "$PROMPT" > /tmp/prompt.txt
