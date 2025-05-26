@@ -69,22 +69,24 @@ jobs:
           Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
           Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
 
-                    MAIN_BIN="${{ steps.locate-main.outputs.main-path }}"
-                    if [ ! -x "$MAIN_BIN" ]; then
-                      echo "❌ main binary not executable or missing at $MAIN_BIN"
-                      exit 1
-                    fi
+          MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
+          if [ ! -x "$MAIN_BIN" ]; then
+            echo "❌ llama-cli binary not executable or missing at $MAIN_BIN"
+            exit 1
+          fi
 
-                    SUMMARY=$(echo "$PROMPT" | "$MAIN_BIN" \
-                      -m /models/mistral.gguf \
-                      --temp 0.7 \
-                      --ctx-size 2048 \
-                      --keep -1 \
-                      --n-predict 512)
+          SUMMARY=$(echo "$PROMPT" | "$MAIN_BIN" \
+            -m /models/mistral.gguf \
+            --temp 0.7 \
+            --ctx-size 2048 \
+            --keep -1 \
+            --n-predict 512)
 
-                    echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
-                    echo "$SUMMARY" >> $GITHUB_OUTPUT
-                    echo "EOF" >> $GITHUB_OUTPUT
+          echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "$SUMMARY"
 
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
