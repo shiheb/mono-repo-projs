@@ -19,6 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Install build dependencies
         run: |
           apt-get update && apt-get install -y cmake build-essential git libcurl4-openssl-dev
@@ -30,33 +31,31 @@ jobs:
       - name: Build llama.cpp
         run: |
           cd /llama.cpp
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake -B build
           cmake --build build --config Release -j$(nproc)
+
       - name: Download model (Mistral 7B)
         run: |
           mkdir -p /models/
           curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
             -o /models/mistral.gguf
 
-      - name: Locate main binary
-        run: find /llama.cpp/build -name main -type f -executable
-
-      - name: Check binary presence and details
+      - name: Locate `main` binary
+        id: locate-main
         run: |
-          ls -l /llama.cpp/build/main || echo "Binary not found"
-          file /llama.cpp/build/main || echo "Cannot find or inspect the binary"
-          test -x /llama.cpp/build/main || echo "Binary is not executable"
-          ldd /llama.cpp/build/main || echo "ldd failed"
+          MAIN_PATH=$(find /llama.cpp/build -name main -type f -executable | head -n 1)
+          echo "Found main binary at: $MAIN_PATH"
+          if [ -z "$MAIN_PATH" ]; then
+            echo "❌ main binary not found"
+            exit 1
+          fi
+          echo "main-path=$MAIN_PATH" >> $GITHUB_OUTPUT
 
       - name: Generate diff summary
         id: llm-summary
         run: |
           cd "$GITHUB_WORKSPACE"
-
-          # Mark the repo as safe for Git
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-          # Sanity check
           git status || { echo "❌ Not a git repo"; exit 1; }
 
           BASE_SHA=${{ github.event.pull_request.base.sha }}
@@ -67,16 +66,22 @@ jobs:
           Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
           Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
 
-          SUMMARY=$(echo "$PROMPT" | /llama.cpp/build/main \
-            -m /models/mistral.gguf \
-            --temp 0.7 \
-            --ctx-size 2048 \
-            --keep -1 \
-            --n-predict 512)
+                    MAIN_BIN="${{ steps.locate-main.outputs.main-path }}"
+                    if [ ! -x "$MAIN_BIN" ]; then
+                      echo "❌ main binary not executable or missing at $MAIN_BIN"
+                      exit 1
+                    fi
 
-          echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
-          echo "$SUMMARY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+                    SUMMARY=$(echo "$PROMPT" | "$MAIN_BIN" \
+                      -m /models/mistral.gguf \
+                      --temp 0.7 \
+                      --ctx-size 2048 \
+                      --keep -1 \
+                      --n-predict 512)
+
+                    echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
+                    echo "$SUMMARY" >> $GITHUB_OUTPUT
+                    echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
