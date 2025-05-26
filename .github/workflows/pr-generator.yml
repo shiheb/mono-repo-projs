@@ -41,8 +41,12 @@ jobs:
           -d "$PAYLOAD")
 
           echo "SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')" >> $GITHUB_OUTPUT
+      - name: Create or update PR comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ### AI-Generated PR Summary
 
-      #- name: Update PR Description
-      #   uses: peter-evans/commit-comment@v3
-      #   with:
-      #    body: "### AI-Generated PR Summary\n\n${{ steps.deepseek.outputs.SUMMARY }}"
+            ${{ steps.deepseek.outputs.SUMMARY }}
+          edit-mode: replace
