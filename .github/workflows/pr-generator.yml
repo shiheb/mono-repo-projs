@@ -46,6 +46,6 @@ jobs:
           echo "SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')" >> $GITHUB_OUTPUT
 
       - name: Update PR Description
-        uses: peter-evans/commit-comment@v2
+        uses: peter-evans/commit-comment@v3
         with:
           body: "### AI-Generated PR Summary\n\n${{ steps.deepseek.outputs.SUMMARY }}"
