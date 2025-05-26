@@ -10,6 +10,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Get PR Diff
         id: git-diff
         run: |
@@ -26,21 +27,21 @@ jobs:
           PAYLOAD=$(
           jq -n --arg diff "$DIFF_CONTENT" '
               {
-              model: "deepseek-chat",
-              messages: [
+                model: "deepseek-chat",
+                messages: [
                   {
-                  role: "user",
-                  content: "Summarize these code changes for a PR description:\n\n" + $diff
+                    role: "user",
+                    content: "Summarize these code changes for a PR description:\n\n" + $diff
                   }
-              ]
+                ]
               }
           '
           )
 
           RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
-          -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
-          -H "Content-Type: application/json" \
-          -d "$PAYLOAD"
+            -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
           )
 
           echo "SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')" >> $GITHUB_OUTPUT
