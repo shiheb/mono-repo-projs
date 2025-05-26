@@ -19,7 +19,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
+      - name: Install wget
+        run: |
+          apt-get update && apt-get install -y wget
       - name: Download model (Mistral 7B)
         run: |
           wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
