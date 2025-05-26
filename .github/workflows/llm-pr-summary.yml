@@ -30,10 +30,9 @@ jobs:
       - name: Build llama.cpp
         run: |
           cd /llama.cpp
-          mkdir -p build
-          cd build
-          cmake ..
-          make -j$(nproc)
+          mkdir -p build && cd build
+          cmake .. -DLLAMA_BUILD_EXAMPLES=ON
+          make main -j$(nproc)
 
       - name: Download model (Mistral 7B)
         run: |
@@ -41,8 +40,8 @@ jobs:
           curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
             -o /models/mistral.gguf
 
-      - name: Locate `main` binary
-        run: find / -name main -type f -executable 2>/dev/null
+      - name: Locate main binary
+        run: find /llama.cpp/build -name main -type f -executable
 
       - name: Check binary presence and details
         run: |
