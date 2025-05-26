@@ -25,6 +25,9 @@ jobs:
           mkdir -p /models/
           curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
             -o /models/mistral.gguf
+      - name: Locate `main` binary
+        run: |
+          find / -name main -type f -executable 2>/dev/null
 
       - name: Generate diff summary
         id: llm-summary
