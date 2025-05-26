@@ -47,7 +47,7 @@ jobs:
           Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
 
           # Run inference
-          SUMMARY=$(echo "$PROMPT" | /llama.cpp/build/bin/llama-cli \
+          SUMMARY=$(echo "$PROMPT" | ./llama.cpp/build/bin/llama-cli \
             -m /models/mistral.gguf \
             --temp 0.7 \
             --ctx-size 2048 \

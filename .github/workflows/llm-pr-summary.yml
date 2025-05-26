@@ -64,11 +64,9 @@ jobs:
           BASE_SHA=${{ github.event.pull_request.base.sha }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
-          # Get the diff
+          # Get the diff and limit it to ~6000 characters (safe for ~2000 tokens)
           DIFF_CONTENT=$(git diff --unified=1 "$BASE_SHA" "$HEAD_SHA")
-
-          # Limit to ~6000 characters (~2000 tokens safe estimate)
-          MAX_CHARS=6000
+          MAX_CHARS=12000
           TRUNCATED_DIFF=$(echo "$DIFF_CONTENT" | head -c $MAX_CHARS)
 
           PROMPT="[INST] Analyze these code changes for a pull request. \
@@ -84,7 +82,7 @@ jobs:
           SUMMARY=$("$MAIN_BIN" \
             -m /models/mistral.gguf \
             --temp 0.7 \
-            --ctx-size 32768 \
+            --ctx-size 4096 \
             --keep -1 \
             --n-predict 512 \
             --prompt "$PROMPT")
@@ -94,6 +92,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
           echo "$SUMMARY"
+
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
         with:
