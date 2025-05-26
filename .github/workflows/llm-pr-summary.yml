@@ -13,8 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout PR source code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           path: repo
@@ -22,7 +21,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y \
-            wget cmake build-essential git libcurl4-openssl-dev
+            wget cmake build-essential git
 
       - name: Download model (Mistral 7B)
         run: |
@@ -38,12 +37,19 @@ jobs:
           cmake .. -DLLAMA_CURL=OFF
           make -j$(nproc)
 
+      - name: Verify llama.cpp build
+        run: |
+          ls -lh llama.cpp/build/bin/
+
       - name: Generate diff summary
         id: llm-summary
         run: |
           cd repo
+
+          # Get the git diff for the PR commits
           DIFF_CONTENT="$(git diff --unified=1 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})"
 
+          # Prepare the prompt with instructions + diff
           PROMPT=$(cat <<EOF
           [INST] Analyze these code changes for a pull request.
           Focus on:
@@ -58,21 +64,26 @@ jobs:
           EOF
           )
 
-                    echo "$PROMPT" > /tmp/prompt.txt
+          echo "$PROMPT" > /tmp/prompt.txt
 
-                    ../llama.cpp/build/bin/main \
-                      -m ~/models/mistral.gguf \
-                      --temp 0.7 \
-                      --ctx-size 2048 \
-                      --keep -1 \
-                      --n-predict 512 \
-                      -f /tmp/prompt.txt > /tmp/summary.txt
+          # Verify binary exists before running
+          ls -lh ../llama.cpp/build/bin/main
 
-                    echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
-                    cat /tmp/summary.txt >> $GITHUB_OUTPUT
-                    echo "EOF" >> $GITHUB_OUTPUT
+          # Run the model inference
+          ../llama.cpp/build/bin/main \
+            -m ~/models/mistral.gguf \
+            --temp 0.7 \
+            --ctx-size 2048 \
+            --keep -1 \
+            --n-predict 512 \
+            -f /tmp/prompt.txt > /tmp/summary.txt
 
-      - name: Post summary
+          # Output multi-line summary to GitHub Actions output
+          echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/summary.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Post summary comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
