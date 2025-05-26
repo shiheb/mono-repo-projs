@@ -15,32 +15,36 @@ jobs:
         run: |
           git diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > changes.diff
           echo "DIFF=$(cat changes.diff | jq -sR)" >> $GITHUB_OUTPUT
+
       - name: Call DeepSeek API
         id: deepseek
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
-          # Read diff into a variable
-          DIFF_CONTENT='${{ steps.git-diff.outputs.DIFF }}'
+          DIFF_CONTENT="${{ steps.git-diff.outputs.DIFF }}"
 
-          # Create basic JSON payload
-          PAYLOAD='{
-          "model": "deepseek-chat",
-          "messages": [
+          PAYLOAD=$(
+          jq -n --arg diff "$DIFF_CONTENT" '
               {
-              "role": "user",
-              "content": "Summarize these code changes for a PR description:\n\n'"$(echo "$DIFF_CONTENT" | jq -Rs .)"'"
+              model: "deepseek-chat",
+              messages: [
+                  {
+                  role: "user",
+                  content: "Summarize these code changes for a PR description:\n\n" + $diff
+                  }
+              ]
               }
-          ]
-          }'
+          '
+          )
 
-          # Make API call
           RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
           -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
           -H "Content-Type: application/json" \
-          -d "$PAYLOAD")
+          -d "$PAYLOAD"
+          )
 
           echo "SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')" >> $GITHUB_OUTPUT
+
       - name: Create or update PR comment
         uses: peter-evans/create-or-update-comment@v4
         with:
