@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
       - name: Install build dependencies
         run: |
-          apt-get update && apt-get install -y cmake build-essential git
+          apt-get update && apt-get install -y cmake build-essential git libcurl4-openssl-dev
 
       - name: Clone llama.cpp
         run: |
