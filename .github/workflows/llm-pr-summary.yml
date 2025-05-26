@@ -43,9 +43,6 @@ jobs:
       - name: Locate `llama-cli` binary
         id: locate-cli
         run: |
-          echo "Listing all executables in build dir..."
-          find /llama.cpp/build -type f -executable -exec ls -l {} \;
-
           CLI_PATH=$(find /llama.cpp/build -type f -name llama-cli -executable | head -n 1)
           echo "Found llama-cli binary at: $CLI_PATH"
           if [ -z "$CLI_PATH" ]; then
@@ -59,56 +56,63 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git status || { echo "❌ Not a git repo"; exit 1; }
 
           BASE_SHA=${{ github.event.pull_request.base.sha }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
-          # Extract and trim the unified diff (safe for LLM input)
-          DIFF_CONTENT=$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" | head -c 5450)
+          # Get clean diff without metadata
+          RAW_DIFF=$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" | head -c 8000)
+          CLEAN_DIFF=$(echo "$RAW_DIFF" | grep -vE '^diff --git|^index |^--- |^\+\+\+ |^@@ ' | grep -vE '^[-+]$' | grep -vE '^[-+]\s*$')
 
-          # Craft a refined prompt for better summarization
-          PROMPT="🤖 Local LLM Pull Request Summary
-          [INST]
-          Analyze the following code changes with a focus on:
-          1. **Main Purpose** – What does this PR aim to achieve?
-          2. **Key Code Changes** – List the major technical changes.
-          3. **Impact** – Any functional, performance, or architectural implications.
+          PROMPT="You are an expert code reviewer analyzing a GitHub pull request. 
+          Provide a concise technical summary (3-5 bullet points) focusing on:
 
-          Only summarize the code changes — do NOT include raw diffs, workflow steps, or unrelated metadata. Keep it clear, technical, and under 500 words.
+          - The primary purpose of these changes
+          - Key technical modifications (architecture, logic, dependencies)
+          - Potential impact on the system
 
-          ${DIFF_CONTENT}
-          [/INST]"
+          Format requirements:
+          - Maximum 200 words
+          - No raw code snippets
+          - No file paths
+          - No workflow implementation details
+          - No repeated information
+          - Use clear, professional language
 
-              MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
-              if [ ! -x "$MAIN_BIN" ]; then
-                echo "❌ llama-cli binary not executable or missing at $MAIN_BIN"
-                exit 1
-              fi
+          Changes to analyze:
+          $CLEAN_DIFF"
 
-              SUMMARY=$("$MAIN_BIN" \
-                -m /models/mistral.gguf \
-                --temp 0.7 \
-                --ctx-size 2048 \
-                --keep -1 \
-                --n-predict 512 \
-                --prompt "$PROMPT")
+          MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
+          if [ ! -x "$MAIN_BIN" ]; then
+            echo "❌ llama-cli binary not executable or missing at $MAIN_BIN"
+            exit 1
+          fi
 
-              # Bonus formatting: Wrap summary in a section with emoji and Markdown
-              echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
-              echo -e "## 📝 PR Summary by Local LLM\n\n$SUMMARY" >> $GITHUB_OUTPUT
-              echo "EOF" >> $GITHUB_OUTPUT
+          SUMMARY=$("$MAIN_BIN" \
+            -m /models/mistral.gguf \
+            -t 4 \
+            --temp 0.5 \
+            --ctx-size 2048 \
+            --keep -1 \
+            --n-predict 384 \
+            --repeat-penalty 1.1 \
+            --prompt "$PROMPT")
 
-              echo "$SUMMARY"
+          {
+            echo "SUMMARY<<EOF"
+            echo "### 🤖 LLM PR Analysis"
+            echo "$SUMMARY" | grep -vE '^Main Purpose:|^Key Changes:|^Impact:' | head -n 8
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            ### 🤖 Local LLM Analysis (Mistral 7B)
+            ### 🤖 Concise PR Analysis
 
             ${{ steps.llm-summary.outputs.SUMMARY }}
 
-            *Generated on GitHub Actions runner*
+            _AI-generated summary based on code changes_
           edit-mode: replace
