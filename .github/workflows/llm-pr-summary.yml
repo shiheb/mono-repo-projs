@@ -11,72 +11,43 @@ permissions:
 jobs:
   generate-summary:
     runs-on: ubuntu-latest
-
+    container:
+      image: ghcr.io/ggml-org/llama.cpp:full
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          path: repo
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y \
-            wget cmake build-essential git
 
       - name: Download model (Mistral 7B)
         run: |
-          mkdir -p ~/models/
+          mkdir -p /models/
           wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
-            -O ~/models/mistral.gguf
-
-      - name: Clone and build llama.cpp
-        run: |
-          git clone https://github.com/ggml-org/llama.cpp.git
-          cd llama.cpp
-          cmake -B build -DLLAMA_CURL=OFF
-          cmake --build build --config Release -- -j$(nproc)
-
-      - name: Verify llama.cpp build
-        run: |
-          ls -lh llama.cpp/build/
+            -O /models/mistral.gguf
 
       - name: Generate diff summary
         id: llm-summary
         run: |
-          cd repo
+          # Get formatted diff
+          DIFF_CONTENT=$(git diff --unified=1 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
 
-          DIFF_CONTENT="$(git diff --unified=1 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})"
+          # Create prompt
+          PROMPT="[INST] Analyze these code changes for a pull request. \
+          Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
+          Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
 
-          PROMPT=$(cat <<EOF
-          [INST] Analyze these code changes for a pull request.
-          Focus on:
-          1) Main purpose
-          2) Key changes
-          3) Potential impacts
-
-          Be concise but technical.
-
-          ${DIFF_CONTENT}
-          [/INST]
-          EOF
-          )
-
-          echo "$PROMPT" > /tmp/prompt.txt
-
-          # Updated binary path here
-          ../llama.cpp/build/main \
-            -m ~/models/mistral.gguf \
+          # Run inference (4-bit quantized)
+          SUMMARY=$(echo "$PROMPT" | ./main \
+            -m /models/mistral.gguf \
             --temp 0.7 \
             --ctx-size 2048 \
             --keep -1 \
-            --n-predict 512 \
-            -f /tmp/prompt.txt > /tmp/summary.txt
+            --n-predict 512)
 
           echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
-          cat /tmp/summary.txt >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Post summary comment
+      - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
