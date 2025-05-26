@@ -43,6 +43,14 @@ jobs:
 
       - name: Locate `main` binary
         run: find / -name main -type f -executable 2>/dev/null
+
+      - name: Check binary presence and details
+        run: |
+          ls -l /llama.cpp/build/main || echo "Binary not found"
+          file /llama.cpp/build/main || echo "Cannot find or inspect the binary"
+          test -x /llama.cpp/build/main || echo "Binary is not executable"
+          ldd /llama.cpp/build/main || echo "ldd failed"
+
       - name: Generate diff summary
         id: llm-summary
         run: |
