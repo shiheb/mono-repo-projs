@@ -1,4 +1,5 @@
 name: Auto PR Description
+
 on:
   pull_request:
     types: [opened, synchronize]
@@ -14,29 +15,27 @@ jobs:
       - name: Get PR Diff
         id: git-diff
         run: |
-          git diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > changes.diff
-          echo "DIFF=$(cat changes.diff | jq -sR)" >> $GITHUB_OUTPUT
+          git diff "${{ github.event.pull_request.base.sha }}".."${{ github.event.pull_request.head.sha }}" > changes.diff
+          DIFF=$(cat changes.diff | jq -sR)
+          echo "DIFF=$DIFF" >> $GITHUB_OUTPUT
 
       - name: Call DeepSeek API
         id: deepseek
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DIFF_CONTENT: ${{ steps.git-diff.outputs.DIFF }}
         run: |
-          DIFF_CONTENT="${{ steps.git-diff.outputs.DIFF }}"
-
-          PAYLOAD=$(
-          jq -n --arg diff "$DIFF_CONTENT" '
-              {
-                model: "deepseek-chat",
-                messages: [
-                  {
-                    role: "user",
-                    content: "Summarize these code changes for a PR description:\n\n" + $diff
-                  }
-                ]
-              }
-          '
-          )
+          PAYLOAD=$(jq -n --arg diff "$DIFF_CONTENT" '
+            {
+              model: "deepseek-chat",
+              messages: [
+                {
+                  role: "user",
+                  content: "Summarize these code changes for a PR description:\n\n" + $diff
+                }
+              ]
+            }
+          ')
 
           RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
             -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
@@ -44,7 +43,8 @@ jobs:
             -d "$PAYLOAD"
           )
 
-          echo "SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')" >> $GITHUB_OUTPUT
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
 
       - name: Create or update PR comment
         uses: peter-evans/create-or-update-comment@v4
@@ -53,5 +53,5 @@ jobs:
           body: |
             ### AI-Generated PR Summary
 
-            ${{ steps.deepseek.outputs.SUMMARY }}
+            ${{ steps.deepseek.outputs.summary }}
           edit-mode: replace
