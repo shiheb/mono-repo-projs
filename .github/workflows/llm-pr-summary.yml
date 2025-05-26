@@ -13,23 +13,30 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/ggerganov/llama.cpp:full
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           path: repo
-      - name: Install wget
+
+      - name: Install wget and build tools
         run: |
-          apt-get update && apt-get install -y wget
+          apt-get update && apt-get install -y wget cmake build-essential
+
       - name: Download model (Mistral 7B)
         run: |
           mkdir -p ~/models/
           wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
             -O ~/models/mistral.gguf
-      - name: Verify binary exists
+
+      - name: Build llama.cpp
         run: |
-          ls -la /llama.cpp/build/bin/main
-          file /llama.cpp/build/bin/main
+          cd /llama.cpp
+          mkdir -p build && cd build
+          cmake ..
+          make -j$(nproc)
+
       - name: Generate diff summary
         id: llm-summary
         run: |
@@ -40,12 +47,17 @@ jobs:
           Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
           Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
 
-          SUMMARY=$(echo "$PROMPT" | /llama.cpp/build/bin/main \
-            --model ~/models/mistral.gguf \
+          echo "$PROMPT" > /tmp/prompt.txt
+
+          /llama.cpp/build/bin/main \
+            -m ~/models/mistral.gguf \
             --temp 0.7 \
             --ctx-size 2048 \
             --keep -1 \
-            --n-predict 512)
+            --n-predict 512 \
+            -f /tmp/prompt.txt > /tmp/summary.txt
+
+          SUMMARY=$(cat /tmp/summary.txt)
 
           echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
           echo "$SUMMARY" >> $GITHUB_OUTPUT
@@ -57,6 +69,8 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
             ### 🤖 Local LLM Analysis (Mistral 7B)
+
             ${{ steps.llm-summary.outputs.SUMMARY }}
+
             *Generated on GitHub Actions runner*
           edit-mode: replace
