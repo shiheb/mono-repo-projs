@@ -1,4 +1,4 @@
-name: Second Try
+name: Local LLM PR Summary
 
 on:
   pull_request:
@@ -25,20 +25,18 @@ jobs:
           curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
             -o /models/mistral.gguf
 
-      - name: Get diff outside container
+      - name: Get diff via API
         id: get-diff
         run: |
-          # Use the GitHub API to get the diff
+          # Get diff using GitHub API
           DIFF_CONTENT=$(curl -s \
             -H "Authorization: token ${{ github.token }}" \
             -H "Accept: application/vnd.github.v3.diff" \
             "${{ github.event.pull_request.diff_url }}")
 
-          # Properly escape the content
-          DIFF_CONTENT="${DIFF_CONTENT//'%'/'%25'}"
-          DIFF_CONTENT="${DIFF_CONTENT//$'\n'/'%0A'}"
-          DIFF_CONTENT="${DIFF_CONTENT//$'\r'/'%0D'}"
-          echo "DIFF_CONTENT=${DIFF_CONTENT}" >> $GITHUB_ENV
+          # Escape content and set as output
+          DIFF_ESCAPED=$(echo "$DIFF_CONTENT" | sed -e 's/%/%25/g' -e 's/\n/%0A/g' -e 's/\r/%0D/g')
+          echo "DIFF_CONTENT=${DIFF_ESCAPED}" >> $GITHUB_ENV
 
       - name: Generate summary
         id: llm-summary

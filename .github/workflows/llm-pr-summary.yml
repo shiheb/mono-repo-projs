@@ -74,13 +74,15 @@ jobs:
             echo "❌ llama-cli binary not executable or missing at $MAIN_BIN"
             exit 1
           fi
+          echo "PROMPT: $PROMPT"
 
-          SUMMARY=$(echo "$PROMPT" | "$MAIN_BIN" \
+          SUMMARY=$("$MAIN_BIN" \
             -m /models/mistral.gguf \
             --temp 0.7 \
             --ctx-size 2048 \
             --keep -1 \
-            --n-predict 512)
+            --n-predict 512 \
+            --prompt "$PROMPT")
 
           echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
           echo "$SUMMARY" >> $GITHUB_OUTPUT
