@@ -84,7 +84,7 @@ jobs:
           SUMMARY=$("$MAIN_BIN" \
             -m /models/mistral.gguf \
             --temp 0.7 \
-            --ctx-size 2048 \
+            --ctx-size 32768 \
             --keep -1 \
             --n-predict 512 \
             --prompt "$PROMPT")
