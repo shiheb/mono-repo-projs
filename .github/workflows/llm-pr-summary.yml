@@ -65,7 +65,7 @@ jobs:
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
           # Extract and trim the unified diff (safe for LLM input)
-          DIFF_CONTENT=$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" | head -c 5500)
+          DIFF_CONTENT=$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" | head -c 5450)
 
           # Craft a refined prompt for better summarization
           PROMPT="🤖 Local LLM Pull Request Summary
