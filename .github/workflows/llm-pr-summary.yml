@@ -35,7 +35,7 @@ jobs:
           Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
           Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
 
-          SUMMARY=$(echo "$PROMPT" | /main \
+          SUMMARY=$(echo "$PROMPT" | ./main \
             --model ~/models/mistral.gguf \
             --temp 0.7 \
             --ctx-size 2048 \
