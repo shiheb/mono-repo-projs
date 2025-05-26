@@ -31,7 +31,7 @@ jobs:
       - name: Build llama.cpp
         run: |
           cd /llama.cpp
-          cmake -B build
+          cmake -B build -DLLAMA_BUILD_EXAMPLES=ON
           cmake --build build --config Release -j$(nproc)
 
       - name: Download model (Mistral 7B)
@@ -43,6 +43,9 @@ jobs:
       - name: Locate `main` binary
         id: locate-main
         run: |
+          echo "Listing all files in build dir..."
+          find /llama.cpp/build -type f -exec ls -l {} \;
+
           MAIN_PATH=$(find /llama.cpp/build -name main -type f -executable | head -n 1)
           echo "Found main binary at: $MAIN_PATH"
           if [ -z "$MAIN_PATH" ]; then
