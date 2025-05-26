@@ -13,7 +13,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout PR source code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           path: repo
@@ -21,7 +22,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y \
-            wget cmake build-essential git
+            wget cmake build-essential git libcurl4-openssl-dev
 
       - name: Download model (Mistral 7B)
         run: |
@@ -34,32 +35,42 @@ jobs:
           git clone https://github.com/ggerganov/llama.cpp.git
           cd llama.cpp
           mkdir build && cd build
-          cmake ..
+          cmake .. -DLLAMA_CURL=OFF
           make -j$(nproc)
 
       - name: Generate diff summary
         id: llm-summary
         run: |
           cd repo
-          DIFF_CONTENT=$(git diff --unified=1 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+          DIFF_CONTENT="$(git diff --unified=1 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})"
 
-          PROMPT="[INST] Analyze these code changes for a pull request. \
-          Focus on: 1) Main purpose, 2) Key changes, 3) Potential impacts. \
-          Be concise but technical.\n\n${DIFF_CONTENT}[/INST]"
+          PROMPT=$(cat <<EOF
+          [INST] Analyze these code changes for a pull request.
+          Focus on:
+          1) Main purpose
+          2) Key changes
+          3) Potential impacts
 
-          echo "$PROMPT" > /tmp/prompt.txt
+          Be concise but technical.
 
-          ../llama.cpp/build/bin/main \
-            -m ~/models/mistral.gguf \
-            --temp 0.7 \
-            --ctx-size 2048 \
-            --keep -1 \
-            --n-predict 512 \
-            -f /tmp/prompt.txt > /tmp/summary.txt
+          ${DIFF_CONTENT}
+          [/INST]
+          EOF
+          )
 
-          echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
-          cat /tmp/summary.txt >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+                    echo "$PROMPT" > /tmp/prompt.txt
+
+                    ../llama.cpp/build/bin/main \
+                      -m ~/models/mistral.gguf \
+                      --temp 0.7 \
+                      --ctx-size 2048 \
+                      --keep -1 \
+                      --n-predict 512 \
+                      -f /tmp/prompt.txt > /tmp/summary.txt
+
+                    echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
+                    cat /tmp/summary.txt >> $GITHUB_OUTPUT
+                    echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
