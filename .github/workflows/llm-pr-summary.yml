@@ -29,8 +29,12 @@ jobs:
       - name: Generate diff summary
         id: llm-summary
         run: |
-          # Ensure we're in a Git repo
           cd "$GITHUB_WORKSPACE"
+
+          # Mark the repo as safe for Git
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          # Sanity check
           git status || { echo "❌ Not a git repo"; exit 1; }
 
           BASE_SHA=${{ github.event.pull_request.base.sha }}
