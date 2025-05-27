@@ -1,0 +1,96 @@
+name: Local LLM PR Summary
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  generate-summary:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ggml-org/llama.cpp:full
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          apt-get update && apt-get install -y \
+            cmake \
+            build-essential \
+            git \
+            curl \
+            libcurl4-openssl-dev
+
+      - name: Clone llama.cpp
+        run: |
+          git clone https://github.com/ggml-org/llama.cpp.git /llama.cpp
+
+      - name: Build llama.cpp
+        run: |
+          cd /llama.cpp
+          cmake -B build -DLLAMA_BUILD_EXAMPLES=ON
+          cmake --build build --config Release -j$(nproc)
+
+      - name: Download model (Mistral 7B Instruct)
+        run: |
+          mkdir -p /models/
+          curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
+            -o /models/model.gguf
+
+      - name: Locate llama-cli binary
+        id: locate-cli
+        run: |
+          CLI_PATH=$(find /llama.cpp/build -type f -name llama-cli -executable | head -n 1)
+          echo "main-path=$CLI_PATH" >> $GITHUB_OUTPUT
+
+      - name: Generate PR Summary with LLM
+        id: llm-summary
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          RAW_DIFF=$(git diff -U10 "$BASE_SHA" "$HEAD_SHA" | head -c 6000)
+
+          CLEAN_DIFF=$(echo "$RAW_DIFF" | grep -vE '^diff --git|^index |^--- |^\+\+\+ |^@@ ' | grep -vE '^\s*$')
+
+          PROMPT="Analyze the following code changes and summarize:\n- One-line purpose\n- 3–5 bullet points\n- One sentence about potential impact\n\nCode:\n$CLEAN_DIFF"
+
+          MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
+
+          RAW_OUTPUT=$("$MAIN_BIN" \
+            -m /models/model.gguf \
+            -t 4 \
+            --temp 0.3 \
+            --ctx-size 2048 \
+            --n-predict 400 \
+            --repeat-penalty 1.2 \
+            --prompt "$PROMPT")
+
+          # Clean output
+          ANALYSIS=$(echo "$RAW_OUTPUT" | sed -E '/^(Analyze|Code changes|^\[.*\])$/d' | sed '/^$/d')
+
+          echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
+          echo "### 🤖 PR Analysis" >> $GITHUB_OUTPUT
+          echo "$ANALYSIS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Post summary as comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ${{ steps.llm-summary.outputs.SUMMARY }}
+
+            _Generated on $(date +"%Y-%m-%d %H:%M %Z")_
+          edit-mode: replace
