@@ -9,7 +9,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  generate-summary:
+  summarize-pr:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -17,32 +17,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare diff
-        id: prepare-diff
+      - name: Get diff
+        id: diff
         run: |
-          RAW_DIFF=$(git diff -U3 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+          DIFF=$(git diff -U3 "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | head -c 6000)
 
-          CLEAN_DIFF=$(echo "$RAW_DIFF" \
-            | grep -v -E '^(diff --git|index|+++|---|@@)' \
-            | head -c 6000 \
-            | sed 's/"/\\"/g')
-
-          if [[ -z "$CLEAN_DIFF" || ${#CLEAN_DIFF} -lt 20 ]]; then
-            echo "SKIP_SUMMARY=true" >> $GITHUB_OUTPUT
+          if [[ -z "$DIFF" || ${#DIFF} -lt 20 ]]; then
+            echo "skip_summary=true" >> $GITHUB_OUTPUT
           else
-            echo "DIFF_CONTENT<<EOF" >> $GITHUB_ENV
-            echo "$CLEAN_DIFF" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
-            echo "SKIP_SUMMARY=false" >> $GITHUB_OUTPUT
+            echo "skip_summary=false" >> $GITHUB_OUTPUT
+            echo "$DIFF" > pr.diff
           fi
 
-      - name: Generate summary
-        if: steps.prepare-diff.outputs.SKIP_SUMMARY == 'false'
-        id: generate-summary
+      - name: Generate summary with Mistral
+        if: steps.diff.outputs.skip_summary == 'false'
+        id: summary
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-          DIFF_CONTENT: ${{ env.DIFF_CONTENT }}
         run: |
+          DIFF_CONTENT=$(cat pr.diff)
+
           PROMPT=$(cat <<EOF
           Analyze these code changes for a GitHub pull request and provide:
           1. **Purpose**: One sentence describing the main goal
@@ -72,7 +66,6 @@ jobs:
               max_tokens: 600
             }')
 
-          echo "Calling Mistral API..."
           RESPONSE=$(curl -s -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $MISTRAL_API_KEY" \
@@ -81,11 +74,6 @@ jobs:
 
           echo "Raw API Response: $RESPONSE"
 
-          if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' > /dev/null; then
-            echo "Error: Unexpected API response format"
-            exit 1
-          fi
-
           SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
 
           echo "summary<<EOF" >> $GITHUB_OUTPUT
@@ -93,21 +81,20 @@ jobs:
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Post summary comment
-        if: steps.prepare-diff.outputs.SKIP_SUMMARY == 'false'
+      - name: Comment summary
+        if: steps.diff.outputs.skip_summary == 'false'
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            ${{ steps.generate-summary.outputs.summary }}
+            ${{ steps.summary.outputs.summary }}
 
-            _Generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral AI_
-          edit-mode: replace
+            _Generated using Mistral AI_
 
-      - name: Post fallback comment
-        if: steps.prepare-diff.outputs.SKIP_SUMMARY == 'true'
+      - name: Skip comment
+        if: steps.diff.outputs.skip_summary == 'true'
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            🤖 _AI summary skipped_: No significant code changes detected in this PR.
+            🤖 AI summary skipped: No significant code changes detected in this PR.
