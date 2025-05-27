@@ -44,57 +44,61 @@ jobs:
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
         run: |
-          # Prepare the diff content
-          DIFF_CONTENT=$(cat pr.diff | sed 's/"/\\"/g' | tr '\n' ' ')
+          # Prepare the diff content with proper escaping
+          DIFF_CONTENT=$(cat pr.diff | jq -sR . | sed 's/^"\(.*\)"$/\1/')
 
-          # Create optimized prompt
-          read -r -d '' PROMPT << EOM
-          Analyze these GitHub changes and provide:
-          1. **Purpose**: Concise main objective (1 sentence)
-          2. **Key Changes**: 3-5 specific technical modifications
-          3. **Impact**: Potential system effects
-          4. **Review Focus**: Areas needing special attention
-
-          Code Changes:
-          $DIFF_CONTENT
-          EOM
-
-          # Call Mistral API with error handling
-          RESPONSE=$(curl -f -s -X POST \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $MISTRAL_API_KEY" \
-            -d @- https://api.mistral.ai/v1/chat/completions <<EOF
-          {
-            "model": "mistral-medium-latest",
-            "messages": [
+          # Create the prompt payload using jq for proper JSON construction
+          REQUEST_JSON=$(jq -n \
+          --arg diff "$DIFF_CONTENT" \
+          '{
+              model: "mistral-medium-latest",
+              messages: [
               {
-                "role": "system",
-                "content": "You are a senior engineer analyzing PRs. Respond with clean markdown using only the requested sections. Be technical and concise."
+                  role: "system",
+                  content: "You are a senior engineer analyzing PRs. Respond with clean markdown using only: 1) Purpose (1 sentence), 2) Key Changes (3-5 bullet points), 3) Impact, 4) Review Focus."
               },
               {
-                "role": "user",
-                "content": "$PROMPT"
+                  role: "user",
+                  content: ("Analyze these GitHub changes:\n\nDiff:\n" + $diff)
               }
-            ],
-            "temperature": 0.3,
-            "max_tokens": 800
-          }
-          EOF
-          ) || { echo "API call failed"; exit 1; }
+              ],
+              temperature: 0.3,
+              max_tokens: 800
+          }')
 
-          # Process response with validation
-          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content? // empty')
-          if [ -z "$SUMMARY" ]; then
-            echo "::error::Empty API response"
-            echo "$RESPONSE" | jq .
-            exit 1
+          echo "Generated request JSON:"
+          echo "$REQUEST_JSON" | jq .
+
+          # Call Mistral API with timeout and retry
+          for i in {1..3}; do
+          RESPONSE=$(curl -f -s -m 30 -X POST \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $MISTRAL_API_KEY" \
+              -d "$REQUEST_JSON" \
+              https://api.mistral.ai/v1/chat/completions) && break || sleep 5
+          done
+
+          if [ $? -ne 0 ]; then
+          echo "::error::Failed to call Mistral API after 3 attempts"
+          exit 1
           fi
 
+          # Validate and process response
+          echo "API response:"
+          echo "$RESPONSE" | jq .
+
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content? // empty')
+          if [ -z "$SUMMARY" ]; then
+          echo "::error::Empty or invalid API response"
+          echo "$RESPONSE" | jq .
+          exit 1
+          fi
+
+          # Create safe output
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "### 🤖 AI-Powered PR Analysis" >> $GITHUB_OUTPUT
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Determine affected areas
         id: code-owners
         run: |
