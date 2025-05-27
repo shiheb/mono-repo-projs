@@ -21,21 +21,16 @@ jobs:
       - name: Prepare diff
         id: prepare-diff
         run: |
-          # Get clean diff with context
           RAW_DIFF=$(git diff -U3 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
 
-          # Remove metadata lines and limit size
           CLEAN_DIFF=$(echo "$RAW_DIFF" \
             | grep -v -E '^(diff --git|index|+++|---|@@)' \
             | head -c 6000 \
             | sed 's/"/\\"/g')
 
-          # Store diff in GITHUB_ENV for next step
-          echo "DIFF_CONTENT=$CLEAN_DIFF" >> $GITHUB_ENV
-
-          # Debug output
-          echo "Diff prepared (${#CLEAN_DIFF} chars)"
-          echo "Sample: ${CLEAN_DIFF:0:100}"
+          echo "DIFF_CONTENT<<EOF" >> $GITHUB_ENV
+          echo "$CLEAN_DIFF" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: Generate summary
         id: generate-summary
@@ -43,19 +38,17 @@ jobs:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           DIFF_CONTENT: ${{ env.DIFF_CONTENT }}
         run: |
-          # Create the analysis prompt
-            PROMPT=$(cat <<EOF
-            Analyze these code changes for a GitHub pull request and provide:
-            1. **Purpose**: One sentence describing the main goal
-            2. **Changes**: 3-5 specific technical modifications
-            3. **Impact**: Potential effects on the system
+          PROMPT=$(cat <<EOF
+Analyze these code changes for a GitHub pull request and provide:
+1. **Purpose**: One sentence describing the main goal
+2. **Changes**: 3-5 specific technical modifications
+3. **Impact**: Potential effects on the system
 
-            Diff:
-            $DIFF_CONTENT
-            EOF
-            )
+Diff:
+$DIFF_CONTENT
+EOF
+)
 
-          # Build the API request
           REQUEST_JSON=$(jq -n \
             --arg prompt "$PROMPT" \
             '{
@@ -74,7 +67,6 @@ jobs:
               max_tokens: 600
             }')
 
-          # Call Mistral API
           echo "Calling Mistral API..."
           RESPONSE=$(curl -s -X POST \
             -H "Content-Type: application/json" \
@@ -84,16 +76,13 @@ jobs:
 
           echo "Raw API Response: $RESPONSE"
 
-          # Validate response
           if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' > /dev/null; then
             echo "Error: Unexpected API response format"
             exit 1
           fi
 
-          # Extract summary
           SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
 
-          # Set GitHub Action output
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "### 🤖 AI-Powered PR Analysis" >> $GITHUB_OUTPUT
           echo "$SUMMARY" >> $GITHUB_OUTPUT
@@ -108,3 +97,14 @@ jobs:
 
             _Generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral AI_
           edit-mode: replace
+
+      - name: Set PR status
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              state: 'success'
+            })
