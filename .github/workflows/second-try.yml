@@ -137,9 +137,9 @@ jobs:
             _AI analysis generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral_
             EOF
 
-          gh pr edit "${{ github.event.pull_request.number }}" \
-            --repo "${{ github.repository }}" \
-            --body-file new_body.md
+            gh pr edit "${{ github.event.pull_request.number }}" \
+                --repo "${{ github.repository }}" \
+                --body-file new_body.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
