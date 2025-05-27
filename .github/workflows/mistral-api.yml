@@ -1,4 +1,4 @@
-name: AI PR Summary with Mistral
+name: AI PR Summary with Mistral and Fallback
 
 on:
   pull_request:
@@ -9,34 +9,33 @@ permissions:
   pull-requests: write
 
 jobs:
-  summarize-pr:
-    runs-on: ubuntu-latest
+  generate-summary:
+    runs-on: ubuntu-latest # Change to self-hosted if using local LLM fallback
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Get diff
+      - name: Prepare diff
         id: diff
         run: |
-          DIFF=$(git diff -U3 "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | head -c 6000)
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+          DIFF=$(git diff -U3 $BASE..$HEAD)
 
-          if [[ -z "$DIFF" || ${#DIFF} -lt 20 ]]; then
-            echo "skip_summary=true" >> $GITHUB_OUTPUT
-          else
-            echo "skip_summary=false" >> $GITHUB_OUTPUT
-            echo "$DIFF" > pr.diff
-          fi
+          CLEAN_DIFF=$(echo "$DIFF" | grep -v -E '^(diff --git|index|+++|---|@@)' | head -c 6000 | sed 's/"/\\"/g')
 
-      - name: Generate summary with Mistral
-        if: steps.diff.outputs.skip_summary == 'false'
+          echo "DIFF_CONTENT=$CLEAN_DIFF" >> $GITHUB_ENV
+          echo "raw_diff<<EOF" >> $GITHUB_OUTPUT
+          echo "$DIFF" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate AI summary with Mistral
         id: summary
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
         run: |
-          DIFF_CONTENT=$(cat pr.diff)
-
           PROMPT=$(cat <<EOF
           Analyze these code changes for a GitHub pull request and provide:
           1. **Purpose**: One sentence describing the main goal
@@ -66,35 +65,73 @@ jobs:
               max_tokens: 600
             }')
 
+          echo "Calling Mistral API..."
           RESPONSE=$(curl -s -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $MISTRAL_API_KEY" \
             -d "$REQUEST_JSON" \
             https://api.mistral.ai/v1/chat/completions)
 
-          echo "Raw API Response: $RESPONSE"
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
 
-          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          if [[ -z "$SUMMARY" ]]; then
+            echo "summary=🤖 AI summary skipped: No significant code changes detected in this PR." >> $GITHUB_OUTPUT
+          else
+            echo "summary<<EOF" >> $GITHUB_OUTPUT
+            echo "### 🤖 AI-Powered PR Analysis" >> $GITHUB_OUTPUT
+            echo "$SUMMARY" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
 
-          echo "summary<<EOF" >> $GITHUB_OUTPUT
-          echo "### 🤖 AI-Powered PR Analysis" >> $GITHUB_OUTPUT
-          echo "$SUMMARY" >> $GITHUB_OUTPUT
+      - name: Detect affected areas and reviewers
+        id: reviewers
+        run: |
+          FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
+          REVIEWERS=""
+
+          if echo "$FILES" | grep -q "^backend/"; then
+            REVIEWERS="$REVIEWERS\n🧠 Review requested from: @nectar-soft/backend-team"
+          fi
+          if echo "$FILES" | grep -q "^frontend/"; then
+            REVIEWERS="$REVIEWERS\n🎨 Review requested from: @nectar-soft/frontend-team"
+          fi
+          if echo "$FILES" | grep -q "^.github/workflows/"; then
+            REVIEWERS="$REVIEWERS\n⚙️ Workflow updated. Consider notifying DevOps."
+
+          echo "reviewers<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$REVIEWERS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Comment summary
-        if: steps.diff.outputs.skip_summary == 'false'
+      # Optional: fallback summary with local model (only if Mistral fails)
+      - name: Determine if fallback is needed
+        id: fallback-check
+        run: |
+          if [[ "${{ steps.summary.outputs.summary }}" == "🤖 AI summary skipped: No significant code changes detected in this PR." ]]; then
+            echo "needs_fallback=true" >> $GITHUB_OUTPUT
+          else
+            echo "needs_fallback=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post fallback summary
+        if: ${{ steps.fallback-check.outputs.needs_fallback == 'true' }}
+        run: echo "Fallback summary would go here"
+
+      - name: Post summary as PR comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
             ${{ steps.summary.outputs.summary }}
 
-            _Generated using Mistral AI_
+            ${{ steps.reviewers.outputs.reviewers }}
 
-      - name: Skip comment
-        if: steps.diff.outputs.skip_summary == 'true'
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            🤖 AI summary skipped: No significant code changes detected in this PR.
+            <details>
+            <summary>🔍 View diff</summary>
+
+            ```diff
+            ${{ steps.diff.outputs.raw_diff }}
+            ```
+            </details>
+
+            _Generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral AI_
+          edit-mode: replace
