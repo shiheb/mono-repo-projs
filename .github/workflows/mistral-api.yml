@@ -19,43 +19,52 @@ jobs:
       - name: Prepare diff
         id: prepare-diff
         run: |
-          # Get clean diff with context
-          RAW_DIFF=$(git diff -U3 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+          # Get the raw diff with context
+          RAW_DIFF=$(git diff -U3 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} || echo "")
 
-          # Remove metadata lines and limit size
+          if [ -z "$RAW_DIFF" ]; then
+            echo "::error::No diff found between base and head"
+            exit 1
+          fi
+
+          # Clean and truncate diff
           CLEAN_DIFF=$(echo "$RAW_DIFF" \
             | grep -v -E '^(diff --git|index|+++|---|@@)' \
             | head -c 6000 \
-            | sed 's/"/\\"/g')
+            | sed 's/"/\\"/g' | tr '\n' ' ')
 
-          # Store as environment variable
-          echo "DIFF_CONTENT=$CLEAN_DIFF" >> $GITHUB_ENV
-
-          # Debug output
-          echo "Diff prepared (${#CLEAN_DIFF} chars)"
-          echo "Sample: ${CLEAN_DIFF:0:100}"
+          # Store in environment
+          echo "DIFF_CONTENT=${CLEAN_DIFF}" >> $GITHUB_ENV
+          echo "Diff size: ${#CLEAN_DIFF} chars"
 
       - name: Generate summary
         id: generate-summary
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
         run: |
-          # Create the analysis prompt
-          read -r -d '' PROMPT << EOM
-          Analyze these code changes for a GitHub pull request and provide:
+          # Verify diff content
+          if [ -z "$DIFF_CONTENT" ]; then
+            echo "::error::DIFF_CONTENT is empty"
+            exit 1
+          fi
+
+          # Create the prompt
+          PROMPT=$(cat <<EOF
+          Analyze these GitHub changes and provide:
           1. **Purpose**: One sentence describing the main goal
           2. **Changes**: 3-5 specific technical modifications
           3. **Impact**: Potential effects on the system
 
           Diff:
-          $DIFF_CONTENT
-          EOM
+          ${DIFF_CONTENT}
+          EOF
+          )
 
           # Build the API request
           REQUEST_JSON=$(jq -n \
             --arg prompt "$PROMPT" \
             '{
-              model: "mistral-medium-latest",
+              model: "mistral-small-latest",
               messages: [
                 {
                   role: "system",
@@ -66,20 +75,32 @@ jobs:
                   content: $prompt
                 }
               ],
-              temperature: 0.2,
-              max_tokens: 600
+              temperature: 0.3,
+              max_tokens: 500
             }')
 
-          # Call Mistral API
+          # Call API with error handling
           echo "Calling Mistral API..."
-          RESPONSE=$(curl -s -X POST \
+          RESPONSE=$(curl -f -s -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $MISTRAL_API_KEY" \
             -d "$REQUEST_JSON" \
             https://api.mistral.ai/v1/chat/completions)
 
+          if [ $? -ne 0 ]; then
+            echo "::error::API request failed"
+            exit 1
+          fi
+
           # Process response
-          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content? // empty')
+
+          if [ -z "$SUMMARY" ]; then
+            echo "::error::Empty response from API"
+            echo "API Response:"
+            echo "$RESPONSE"
+            exit 1
+          fi
 
           # Set output
           echo "summary<<EOF" >> $GITHUB_OUTPUT
@@ -88,11 +109,12 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Post summary
+        if: success()
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
             ${{ steps.generate-summary.outputs.summary }}
 
-            _Generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral AI_
+            _Generated at $(date -u +'%Y-%m-%d %H:%M UTC')_
           edit-mode: replace
