@@ -1,4 +1,8 @@
-# Default reviewer for all files
+# Default owners for all files
+* @shiheb @shiiheb
 
-- @shiheb
-- @shiiheb
+# Frontend owners
+/frontend/ @shiiheb @nectar-soft/frontend-team
+
+# Backend owners
+/backend/ @shiheb @nectar-soft/backend-team

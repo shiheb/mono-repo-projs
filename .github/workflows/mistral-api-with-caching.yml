@@ -1,0 +1,158 @@
+name: Enhanced with cache AI PR Summary with Mistral
+
+#on:
+# pull_request:
+#  types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  summarize-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get and analyze diff
+        id: diff-analysis
+        run: |
+          # Get clean diff with context
+          RAW_DIFF=$(git diff -U3 --ignore-all-space --ignore-blank-lines \
+            "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")
+
+          # Calculate diff metrics
+          DIFF_LENGTH=${#RAW_DIFF}
+          CHANGED_FILES=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | wc -l)
+
+          # Skip if diff is too small or contains only whitespace changes
+          if [[ $DIFF_LENGTH -lt 100 || $CHANGED_FILES -eq 0 ]]; then
+            echo "skip_summary=true" >> $GITHUB_OUTPUT
+            echo "summary_status=No significant changes detected" >> $GITHUB_OUTPUT
+          else
+            echo "skip_summary=false" >> $GITHUB_OUTPUT
+            echo "$RAW_DIFF" | head -c 8000 > pr.diff
+            echo "summary_status=Diff ready for analysis ($DIFF_LENGTH chars, $CHANGED_FILES files)" >> $GITHUB_OUTPUT
+          fi
+        # Add caching here ▼
+      - name: Cache Mistral requests
+        if: steps.diff-analysis.outputs.skip_summary == 'false'
+        uses: actions/cache@v4
+        with:
+          path: /tmp/mistral-cache
+          key: mistral-${{ hashFiles('pr.diff') }}
+          restore-keys: |
+            mistral-
+      - name: Generate AI summary
+        if: steps.diff-analysis.outputs.skip_summary == 'false'
+        id: ai-summary
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+        run: |
+          # Prepare the diff content with proper escaping
+          DIFF_CONTENT=$(cat pr.diff | jq -sR . | sed 's/^"\(.*\)"$/\1/')
+
+          # Create the prompt payload using jq for proper JSON construction
+          REQUEST_JSON=$(jq -n \
+          --arg diff "$DIFF_CONTENT" \
+          '{
+              model: "mistral-medium-latest",
+              messages: [
+              {
+                  role: "system",
+                  content: "You are a senior engineer analyzing PRs. Respond with clean markdown using only: 1) Purpose (1 sentence), 2) Key Changes (3-5 bullet points), 3) Impact, 4) Review Focus."
+              },
+              {
+                  role: "user",
+                  content: ("Analyze these GitHub changes:\n\nDiff:\n" + $diff)
+              }
+              ],
+              temperature: 0.3,
+              max_tokens: 800
+          }')
+
+          echo "Generated request JSON:"
+          echo "$REQUEST_JSON" | jq .
+
+          # Call Mistral API with timeout and retry
+          for i in {1..3}; do
+          RESPONSE=$(curl -f -s -m 30 -X POST \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $MISTRAL_API_KEY" \
+              -d "$REQUEST_JSON" \
+              https://api.mistral.ai/v1/chat/completions) && break || sleep 5
+          done
+
+          if [ $? -ne 0 ]; then
+          echo "::error::Failed to call Mistral API after 3 attempts"
+          exit 1
+          fi
+
+          # Validate and process response
+          echo "API response:"
+          echo "$RESPONSE" | jq .
+
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content? // empty')
+          if [ -z "$SUMMARY" ]; then
+          echo "::error::Empty or invalid API response"
+          echo "$RESPONSE" | jq .
+          exit 1
+          fi
+
+          # Create safe output
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "### 🤖 AI-Powered PR Analysis" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Determine affected areas
+        id: code-owners
+        run: |
+          # Initialize output
+          REVIEW_SECTIONS=""
+
+          # Check backend changes
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -qE '^(src/backend|lib/)'; then
+            REVIEW_SECTIONS="${REVIEW_SECTIONS}\n• 🧠 **Backend**: @nectar-soft/backend-team"
+          fi
+
+          # Check frontend changes
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -qE '^(src/frontend|public/)'; then
+            REVIEW_SECTIONS="${REVIEW_SECTIONS}\n• 🎨 **Frontend**: @nectar-soft/frontend-team"
+          fi
+
+          # Check infrastructure changes
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -qE '^(terraform|.github/workflows|docker/)'; then
+            REVIEW_SECTIONS="${REVIEW_SECTIONS}\n• 🏗 **Infrastructure**: @nectar-soft/devops-team"
+          fi
+
+          # Set output
+          echo "review_areas<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$REVIEW_SECTIONS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Post summary comment
+        if: steps.diff-analysis.outputs.skip_summary == 'false'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ${{ steps.ai-summary.outputs.summary }}
+
+            ### 🔍 Review Areas
+            ${{ steps.code-owners.outputs.review_areas }}
+
+            $(echo "_AI analysis generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral_")
+
+      - name: Post skip notice
+        if: steps.diff-analysis.outputs.skip_summary == 'true'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ### 🤖 AI Summary Notice
+            ${{ steps.diff-analysis.outputs.summary_status }}
+
+            No automated analysis was performed for this PR. Please check the PR diff for any relevant changes.
