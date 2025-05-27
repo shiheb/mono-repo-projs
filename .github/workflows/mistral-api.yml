@@ -39,15 +39,15 @@ jobs:
           DIFF_CONTENT: ${{ env.DIFF_CONTENT }}
         run: |
           PROMPT=$(cat <<EOF
-Analyze these code changes for a GitHub pull request and provide:
-1. **Purpose**: One sentence describing the main goal
-2. **Changes**: 3-5 specific technical modifications
-3. **Impact**: Potential effects on the system
+          Analyze these code changes for a GitHub pull request and provide:
+          1. **Purpose**: One sentence describing the main goal
+          2. **Changes**: 3-5 specific technical modifications
+          3. **Impact**: Potential effects on the system
 
-Diff:
-$DIFF_CONTENT
-EOF
-)
+          Diff:
+          $DIFF_CONTENT
+          EOF
+          )
 
           REQUEST_JSON=$(jq -n \
             --arg prompt "$PROMPT" \
