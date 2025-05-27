@@ -1,4 +1,5 @@
 name: AI PR Summary with Mistral
+
 on:
   pull_request:
     types: [opened, synchronize]
@@ -10,6 +11,7 @@ permissions:
 jobs:
   generate-summary:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,52 +21,45 @@ jobs:
       - name: Prepare diff
         id: prepare-diff
         run: |
-          # Get the raw diff with context
-          RAW_DIFF=$(git diff -U3 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} || echo "")
+          # Get clean diff with context
+          RAW_DIFF=$(git diff -U3 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
 
-          if [ -z "$RAW_DIFF" ]; then
-            echo "::error::No diff found between base and head"
-            exit 1
-          fi
-
-          # Clean and truncate diff
+          # Remove metadata lines and limit size
           CLEAN_DIFF=$(echo "$RAW_DIFF" \
             | grep -v -E '^(diff --git|index|+++|---|@@)' \
             | head -c 6000 \
-            | sed 's/"/\\"/g' | tr '\n' ' ')
+            | sed 's/"/\\"/g')
 
-          # Store in environment
-          echo "DIFF_CONTENT=${CLEAN_DIFF}" >> $GITHUB_ENV
-          echo "Diff size: ${#CLEAN_DIFF} chars"
+          # Store diff in GITHUB_ENV for next step
+          echo "DIFF_CONTENT=$CLEAN_DIFF" >> $GITHUB_ENV
+
+          # Debug output
+          echo "Diff prepared (${#CLEAN_DIFF} chars)"
+          echo "Sample: ${CLEAN_DIFF:0:100}"
 
       - name: Generate summary
         id: generate-summary
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          DIFF_CONTENT: ${{ env.DIFF_CONTENT }}
         run: |
-          # Verify diff content
-          if [ -z "$DIFF_CONTENT" ]; then
-            echo "::error::DIFF_CONTENT is empty"
-            exit 1
-          fi
-
-          # Create the prompt
+          # Create the analysis prompt
           PROMPT=$(cat <<EOF
-          Analyze these GitHub changes and provide:
-          1. **Purpose**: One sentence describing the main goal
-          2. **Changes**: 3-5 specific technical modifications
-          3. **Impact**: Potential effects on the system
+            Analyze these code changes for a GitHub pull request and provide:
+            1. **Purpose**: One sentence describing the main goal
+            2. **Changes**: 3-5 specific technical modifications
+            3. **Impact**: Potential effects on the system
 
-          Diff:
-          ${DIFF_CONTENT}
-          EOF
-          )
+            Diff:
+            $DIFF_CONTENT
+            EOF
+                    )
 
           # Build the API request
           REQUEST_JSON=$(jq -n \
             --arg prompt "$PROMPT" \
             '{
-              model: "mistral-small-latest",
+              model: "mistral-medium-latest",
               messages: [
                 {
                   role: "system",
@@ -75,46 +70,41 @@ jobs:
                   content: $prompt
                 }
               ],
-              temperature: 0.3,
-              max_tokens: 500
+              temperature: 0.2,
+              max_tokens: 600
             }')
 
-          # Call API with error handling
+          # Call Mistral API
           echo "Calling Mistral API..."
-          RESPONSE=$(curl -f -s -X POST \
+          RESPONSE=$(curl -s -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $MISTRAL_API_KEY" \
             -d "$REQUEST_JSON" \
             https://api.mistral.ai/v1/chat/completions)
 
-          if [ $? -ne 0 ]; then
-            echo "::error::API request failed"
+          echo "Raw API Response: $RESPONSE"
+
+          # Validate response
+          if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' > /dev/null; then
+            echo "Error: Unexpected API response format"
             exit 1
           fi
 
-          # Process response
-          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content? // empty')
+          # Extract summary
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
 
-          if [ -z "$SUMMARY" ]; then
-            echo "::error::Empty response from API"
-            echo "API Response:"
-            echo "$RESPONSE"
-            exit 1
-          fi
-
-          # Set output
+          # Set GitHub Action output
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "### 🤖 AI-Powered PR Analysis" >> $GITHUB_OUTPUT
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Post summary
-        if: success()
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
             ${{ steps.generate-summary.outputs.summary }}
 
-            _Generated at $(date -u +'%Y-%m-%d %H:%M UTC')_
+            _Generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral AI_
           edit-mode: replace
