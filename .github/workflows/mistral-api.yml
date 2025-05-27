@@ -44,7 +44,7 @@ jobs:
           DIFF_CONTENT: ${{ env.DIFF_CONTENT }}
         run: |
           # Create the analysis prompt
-          PROMPT=$(cat <<EOF
+            PROMPT=$(cat <<EOF
             Analyze these code changes for a GitHub pull request and provide:
             1. **Purpose**: One sentence describing the main goal
             2. **Changes**: 3-5 specific technical modifications
@@ -53,7 +53,7 @@ jobs:
             Diff:
             $DIFF_CONTENT
             EOF
-                    )
+            )
 
           # Build the API request
           REQUEST_JSON=$(jq -n \
