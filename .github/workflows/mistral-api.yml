@@ -22,7 +22,7 @@ jobs:
         run: |
           BASE=${{ github.event.pull_request.base.sha }}
           HEAD=${{ github.event.pull_request.head.sha }}
-          DIFF=$(git diff -U3 $BASE..$HEAD)
+          DIFF=$(git diff -U3 --ignore-all-space --ignore-blank-lines $BASE..$HEAD)
 
           CLEAN_DIFF=$(echo "$DIFF" | grep -v -E '^(diff --git|index|+++|---|@@)' | head -c 6000 | sed 's/"/\\"/g')
 
@@ -86,17 +86,22 @@ jobs:
       - name: Detect affected areas and reviewers
         id: reviewers
         run: |
+          set -euo pipefail
+
           FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
           REVIEWERS=""
 
           if echo "$FILES" | grep -q "^backend/"; then
             REVIEWERS="$REVIEWERS\n🧠 Review requested from: @nectar-soft/backend-team"
           fi
+
           if echo "$FILES" | grep -q "^frontend/"; then
             REVIEWERS="$REVIEWERS\n🎨 Review requested from: @nectar-soft/frontend-team"
           fi
+
           if echo "$FILES" | grep -q "^.github/workflows/"; then
             REVIEWERS="$REVIEWERS\n⚙️ Workflow updated. Consider notifying DevOps."
+          fi
 
           echo "reviewers<<EOF" >> $GITHUB_OUTPUT
           echo -e "$REVIEWERS" >> $GITHUB_OUTPUT
