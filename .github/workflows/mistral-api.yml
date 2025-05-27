@@ -1,5 +1,7 @@
 name: AI PR Summary with Mistral
-on: [pull_request]
+on:
+  pull_request:
+    types: [opened, synchronize]
 
 permissions:
   contents: read
@@ -14,39 +16,71 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get PR Diff
-        id: git-diff
+      - name: Get and prepare diff
+        id: prepare-diff
         run: |
-          git diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > diff.txt
-          echo "DIFF=$(cat diff.txt | jq -sR)" >> $GITHUB_OUTPUT
+          # Get unified diff with 5 lines of context
+          RAW_DIFF=$(git diff -U5 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
 
-      - name: Generate Summary via Mistral API
+          # Clean and truncate diff
+          CLEAN_DIFF=$(echo "$RAW_DIFF" | grep -v '^diff --git' | grep -v '^index ' | head -c 6000)
+
+          # Store as both environment variable and step output
+          echo "DIFF_CONTENT<<EOF" >> $GITHUB_ENV
+          echo "$CLEAN_DIFF" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          echo "diff_length=${#CLEAN_DIFF}" >> $GITHUB_OUTPUT
+          echo "diff_sample=${CLEAN_DIFF:0:100}..." >> $GITHUB_OUTPUT
+
+      - name: Generate summary
+        id: generate-summary
         env:
-          DIFF: ${{ steps.git-diff.outputs.DIFF }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          DIFF_CONTENT: ${{ env.DIFF_CONTENT }}
         run: |
-          SUMMARY=$(curl -s https://api.mistral.ai/v1/chat/completions \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $MISTRAL_API_KEY" \
-            -d '{
-              "model": "mistral-medium-latest",
-              "messages": [
+          # Debug output
+          echo "Diff length: ${#DIFF_CONTENT} chars"
+          echo "Sample: ${DIFF_CONTENT:0:100}..."
+
+          # Prepare the API request
+          REQUEST_JSON=$(jq -n \
+            --arg diff "$DIFF_CONTENT" \
+            --arg model "mistral-medium-latest" \
+            '{
+              model: $model,
+              messages: [
                 {
-                  "role": "user",
-                  "content": "Analyze this Git diff and create a concise PR summary with: 1) Main purpose (1 sentence), 2) Key changes (3 bullet points max), 3) Potential impact. Diff: '"$DIFF"'"
+                  role: "system",
+                  content: "You are a senior developer analyzing GitHub PRs. Provide: 1) Main purpose (15 words max), 2) 3 key changes (bullet points), 3) Potential impact. Never include code."
+                },
+                {
+                  role: "user",
+                  content: ("Analyze these changes: " + $diff)
                 }
               ],
-              "temperature": 0.3
-            }' | jq -r '.choices[0].message.content')
+              temperature: 0.3,
+              max_tokens: 500
+            }')
 
-          echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
-          echo "### 🤖 Mistral-Powered PR Analysis" >> $GITHUB_OUTPUT
-          echo "$SUMMARY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Call Mistral API
+          RESPONSE=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $MISTRAL_API_KEY" \
+            -d "$REQUEST_JSON" \
+            https://api.mistral.ai/v1/chat/completions)
 
-      - name: Post summary
+          # Extract and set output
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
+
+      - name: Post summary comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          body: ${{ steps.generate-summary.outputs.SUMMARY }}
+          body: |
+            ### 🤖 Automated PR Analysis
+            ${{ steps.generate-summary.outputs.summary }}
+
+            _Generated at $(date -u +'%Y-%m-%d %H:%M UTC')_
           edit-mode: replace
