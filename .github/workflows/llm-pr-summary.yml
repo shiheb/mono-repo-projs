@@ -20,12 +20,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           apt-get update && apt-get install -y \
             cmake \
             build-essential \
             git \
+            curl \
             libcurl4-openssl-dev
 
       - name: Clone llama.cpp
@@ -38,81 +39,58 @@ jobs:
           cmake -B build -DLLAMA_BUILD_EXAMPLES=ON
           cmake --build build --config Release -j$(nproc)
 
-      - name: Download model (Mistral 7B)
+      - name: Download model (Mistral 7B Instruct)
         run: |
           mkdir -p /models/
           curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf \
-            -o /models/mistral.gguf
+            -o /models/model.gguf
 
       - name: Locate llama-cli binary
         id: locate-cli
         run: |
           CLI_PATH=$(find /llama.cpp/build -type f -name llama-cli -executable | head -n 1)
-          echo "Found llama-cli binary at: $CLI_PATH"
-          if [ -z "$CLI_PATH" ]; then
-            echo "❌ llama-cli binary not found"
-            exit 1
-          fi
           echo "main-path=$CLI_PATH" >> $GITHUB_OUTPUT
 
-      - name: Generate diff summary
+      - name: Generate PR Summary with LLM
         id: llm-summary
         run: |
           cd "$GITHUB_WORKSPACE"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-          BASE_SHA=${{ github.event.pull_request.base.sha }}
-          HEAD_SHA=${{ github.event.pull_request.head.sha }}
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
 
-          RAW_DIFF=$(git diff -U10 "$BASE_SHA" "$HEAD_SHA" | head -c 6450)
-          CLEAN_DIFF=$(echo "$RAW_DIFF" | \
-            grep -vE '^diff --git|^index |^--- |^\+\+\+ |^@@ ' | \
-            grep -vE '^[-+]$' | \
-            grep -vE '^[-+]\s*$' | \
-            sed '/^\s*$/d')
+          RAW_DIFF=$(git diff -U10 "$BASE_SHA" "$HEAD_SHA" | head -c 6000)
 
-          PROMPT=$(cat <<EOF
-          [INST] <<SYS>>
-          Analyze these code changes and provide:
-          1. One sentence describing the main purpose
-          2. 3-5 bullet points of key technical changes
-          3. One line about potential impact
-          Return ONLY the factual analysis without instructions.
-          <</SYS>>
+          CLEAN_DIFF=$(echo "$RAW_DIFF" | grep -vE '^diff --git|^index |^--- |^\+\+\+ |^@@ ' | grep -vE '^\s*$')
 
-          Code changes:
-          $CLEAN_DIFF
-          [/INST]
-          EOF
-                    )
+          PROMPT="Analyze the following code changes and summarize:\n- One-line purpose\n- 3–5 bullet points\n- One sentence about potential impact\n\nCode:\n$CLEAN_DIFF"
 
-                    MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
+          MAIN_BIN="${{ steps.locate-cli.outputs.main-path }}"
 
-                    RAW_OUTPUT=$("$MAIN_BIN" \
-                      -m /models/mistral.gguf \
-                      -t 4 \
-                      --temp 0.3 \
-                      --ctx-size 2048 \
-                      --n-predict 500 \
-                      --repeat-penalty 1.2 \
-                      --prompt "$PROMPT")
+          RAW_OUTPUT=$("$MAIN_BIN" \
+            -m /models/model.gguf \
+            -t 4 \
+            --temp 0.3 \
+            --ctx-size 2048 \
+            --n-predict 400 \
+            --repeat-penalty 1.2 \
+            --prompt "$PROMPT")
 
-                    ANALYSIS=$(echo "$RAW_OUTPUT" | tail -n +2 | sed '/^$/d')
+          # Clean output
+          ANALYSIS=$(echo "$RAW_OUTPUT" | sed -E '/^(Analyze|Code changes|^\[.*\])$/d' | sed '/^$/d')
 
-                    {
-                      echo "SUMMARY<<EOF"
-                      echo "### 🤖 PR Analysis"
-                      echo "$ANALYSIS"
-                      echo "EOF"
-                    } >> $GITHUB_OUTPUT
+          echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
+          echo "### 🤖 PR Analysis" >> $GITHUB_OUTPUT
+          echo "$ANALYSIS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Post summary
+      - name: Post summary as comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            ### 🤖 Automated PR Analysis
             ${{ steps.llm-summary.outputs.SUMMARY }}
 
-            _Generated from code changes at $(date +"%Y-%m-%d %H:%M %Z")_
+            _Generated on $(date +"%Y-%m-%d %H:%M %Z")_
           edit-mode: replace
