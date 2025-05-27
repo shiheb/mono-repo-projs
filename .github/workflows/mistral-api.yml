@@ -22,16 +22,22 @@ jobs:
           # Get unified diff with 5 lines of context
           RAW_DIFF=$(git diff -U5 ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
 
-          # Clean and truncate diff
-          CLEAN_DIFF=$(echo "$RAW_DIFF" | grep -v '^diff --git' | grep -v '^index ' | head -c 6000)
+          # Clean diff and convert to single line
+          CLEAN_DIFF=$(echo "$RAW_DIFF" | 
+          grep -v '^diff --git' |
+          grep -v '^index ' |
+          grep -v '^+++ ' |
+          grep -v '^--- ' |
+          tr '\n' ' ' |
+          sed 's/"/\\"/g' |
+          head -c 6000)
 
-          # Store as both environment variable and step output
-          echo "DIFF_CONTENT<<EOF" >> $GITHUB_ENV
-          echo "$CLEAN_DIFF" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          # Store as environment variable (safe for multi-line content)
+          echo "CLEAN_DIFF=\"$CLEAN_DIFF\"" >> $GITHUB_ENV
 
+          # Create safe outputs
           echo "diff_length=${#CLEAN_DIFF}" >> $GITHUB_OUTPUT
-          echo "diff_sample=${CLEAN_DIFF:0:100}..." >> $GITHUB_OUTPUT
+          echo "diff_sample=$(echo "$CLEAN_DIFF" | head -c 100)" >> $GITHUB_OUTPUT
 
       - name: Generate summary
         id: generate-summary
