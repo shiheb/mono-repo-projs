@@ -1,27 +1,27 @@
-import { useState, useCallback } from "react";
-import { socket } from "./socket";
-import OneToMany from "./components/OneToMany";
+import { useState, useCallback } from 'react';
+import { socket } from './socket';
+import OneToMany from './components/OneToMany';
 
 function App() {
-  const [data, setData] = useState("");
+  const [data, setData] = useState('');
   const [usersNumber, setUsersNumber] = useState(0);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState('');
   const [receivedMessages, setReceivedMessages] = useState([]);
 
-  socket.on("liveUsers", (data) => {
+  socket.on('liveUsers', (data) => {
     setData(data.date);
     setUsersNumber(data.usersNumber);
   });
 
-  socket.on("fromServer", (msg) =>
+  socket.on('fromServer', (msg) =>
     setReceivedMessages([...receivedMessages, msg])
   );
 
   const sendMessage = useCallback(
     (e) => {
       e.preventDefault();
-      socket.emit("fromClient", message);
-      setMessage("");
+      socket.emit('fromClient', message);
+      setMessage('');
     },
     [message]
   );
@@ -29,7 +29,7 @@ function App() {
   return (
     <div>
       <OneToMany />
-      <p>This is data received from the server: {data}</p>
+      <p>Data received from the server: {data}</p>
       <p>Number of users connected: {usersNumber}</p>
       <form onSubmit={sendMessage}>
         <label>

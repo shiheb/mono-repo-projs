@@ -1,17 +1,17 @@
-import { useState, useCallback } from "react";
-import { socket } from "../../socket";
+import { useState, useCallback } from 'react';
+import { socket } from '../../socket';
 
 const OneToMany = () => {
   const [usersNumber, setUsersNumber] = useState(0);
-  const [userNameInput, setUserNameInput] = useState("");
-  const [userName, setUserName] = useState("");
+  const [userNameInput, setUserNameInput] = useState('');
+  const [userName, setUserName] = useState('');
   const [connectedUsers, setConnectedUsers] = useState([]);
 
-  socket.on("liveUsers", (data) => {
+  socket.on('liveUsers', (data) => {
     setUsersNumber(data.usersNumber);
   });
 
-  socket.on("connectedUsers", (users) => {
+  socket.on('connectedUsers', (users) => {
     setConnectedUsers(users);
   });
 
@@ -19,15 +19,15 @@ const OneToMany = () => {
     (e) => {
       e.preventDefault();
       setUserName(userNameInput);
-      setUserNameInput("");
-      socket.emit("newUser", userNameInput);
+      setUserNameInput('');
+      socket.emit('newUser', userNameInput);
     },
     [userNameInput]
   );
 
   const sendLike = useCallback((e, recipient, sender) => {
     e.preventDefault();
-    socket.emit("like", recipient, sender);
+    socket.emit('like', recipient, sender);
   }, []);
 
   return (
@@ -36,13 +36,13 @@ const OneToMany = () => {
       {!userName && (
         <form onSubmit={submitUserName}>
           <label>
-            Please enter your name:
+            Enter your name:
             <input
               onChange={(e) => setUserNameInput(e.target.value)}
               value={userNameInput}
             ></input>
           </label>
-          <button>Ok</button>
+          <button>Submit</button>
         </form>
       )}
       <p>Your name is: {userName}</p>
