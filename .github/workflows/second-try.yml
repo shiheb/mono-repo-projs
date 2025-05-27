@@ -149,8 +149,8 @@ jobs:
             --repo "${{ github.repository }}" \
             --body "### 🤖 AI Summary Notice
 
-${{ steps.diff-analysis.outputs.summary_status }}
+            ${{ steps.diff-analysis.outputs.summary_status }}
 
-No automated analysis was performed for this PR. Please check the PR diff for any relevant changes."
+            No automated analysis was performed for this PR. Please check the PR diff for any relevant changes."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
