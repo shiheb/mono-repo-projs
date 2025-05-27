@@ -1,4 +1,4 @@
-name: AI PR Summary with Mistral
+name: Enhanced with cache AI PR Summary with Mistral
 
 on:
   pull_request:
@@ -37,7 +37,15 @@ jobs:
             echo "$RAW_DIFF" | head -c 8000 > pr.diff
             echo "summary_status=Diff ready for analysis ($DIFF_LENGTH chars, $CHANGED_FILES files)" >> $GITHUB_OUTPUT
           fi
-
+        # Add caching here ▼
+      - name: Cache Mistral requests
+        if: steps.diff-analysis.outputs.skip_summary == 'false'
+        uses: actions/cache@v4
+        with:
+          path: /tmp/mistral-cache
+          key: mistral-${{ hashFiles('pr.diff') }}
+          restore-keys: |
+            mistral-
       - name: Generate AI summary
         if: steps.diff-analysis.outputs.skip_summary == 'false'
         id: ai-summary
