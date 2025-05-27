@@ -11,7 +11,6 @@ permissions:
 jobs:
   generate-summary:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -28,11 +27,17 @@ jobs:
             | head -c 6000 \
             | sed 's/"/\\"/g')
 
-          echo "DIFF_CONTENT<<EOF" >> $GITHUB_ENV
-          echo "$CLEAN_DIFF" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          if [[ -z "$CLEAN_DIFF" || ${#CLEAN_DIFF} -lt 20 ]]; then
+            echo "SKIP_SUMMARY=true" >> $GITHUB_OUTPUT
+          else
+            echo "DIFF_CONTENT<<EOF" >> $GITHUB_ENV
+            echo "$CLEAN_DIFF" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+            echo "SKIP_SUMMARY=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Generate summary
+        if: steps.prepare-diff.outputs.SKIP_SUMMARY == 'false'
         id: generate-summary
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
@@ -88,7 +93,8 @@ jobs:
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Post summary
+      - name: Post summary comment
+        if: steps.prepare-diff.outputs.SKIP_SUMMARY == 'false'
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
@@ -98,13 +104,10 @@ jobs:
             _Generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral AI_
           edit-mode: replace
 
-      - name: Set PR status
-        uses: actions/github-script@v6
+      - name: Post fallback comment
+        if: steps.prepare-diff.outputs.SKIP_SUMMARY == 'true'
+        uses: peter-evans/create-or-update-comment@v4
         with:
-          script: |
-            github.rest.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              state: 'success'
-            })
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            🤖 _AI summary skipped_: No significant code changes detected in this PR.
