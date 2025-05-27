@@ -144,7 +144,7 @@ jobs:
             ### 🔍 Review Areas
             ${{ steps.code-owners.outputs.review_areas }}
 
-            _AI analysis generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral_ shiheb
+            $(echo "_AI analysis generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral_")
 
       - name: Post skip notice
         if: steps.diff-analysis.outputs.skip_summary == 'true'
