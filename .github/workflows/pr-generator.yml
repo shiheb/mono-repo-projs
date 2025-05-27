@@ -1,6 +1,6 @@
 name: Deepseek Auto PR Description
 
-on:
+# on:
 #  pull_request:
 #  types: [opened, synchronize]
 permissions:
