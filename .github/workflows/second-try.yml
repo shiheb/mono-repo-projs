@@ -11,6 +11,7 @@ permissions:
 jobs:
   summarize-pr:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -119,7 +120,8 @@ jobs:
       - name: Update PR body with summary
         if: steps.diff-analysis.outputs.skip_summary == 'false'
         run: |
-          BODY="${{ steps.ai-summary.outputs.summary }}
+            cat <<EOF > new_body.md
+            ${{ steps.ai-summary.outputs.summary }}
 
             ### 🔍 Review Areas
             ${{ steps.code-owners.outputs.review_areas }}
@@ -132,9 +134,8 @@ jobs:
             \`\`\`
             </details>
 
-            _AI analysis generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral_"
-
-          echo "$BODY" > new_body.md
+            _AI analysis generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral_
+            EOF
 
           gh pr edit "${{ github.event.pull_request.number }}" \
             --repo "${{ github.repository }}" \
@@ -149,8 +150,8 @@ jobs:
             --repo "${{ github.repository }}" \
             --body "### 🤖 AI Summary Notice
 
-            ${{ steps.diff-analysis.outputs.summary_status }}
+${{ steps.diff-analysis.outputs.summary_status }}
 
-            No automated analysis was performed for this PR. Please check the PR diff for any relevant changes."
+No automated analysis was performed for this PR. Please check the PR diff for any relevant changes."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
