@@ -120,26 +120,26 @@ jobs:
       - name: Update PR body with summary
         if: steps.diff-analysis.outputs.skip_summary == 'false'
         run: |
-            cat <<EOF > new_body.md
-            ${{ steps.ai-summary.outputs.summary }}
+          cat <<EOF > new_body.md
+          ${{ steps.ai-summary.outputs.summary }}
 
-            ### 🔍 Review Areas
-            ${{ steps.code-owners.outputs.review_areas }}
+          ### 🔍 Review Areas
+          ${{ steps.code-owners.outputs.review_areas }}
 
-            <details>
-            <summary>🔍 View diff</summary>
+          <details>
+          <summary>🔍 View diff</summary>
 
-            \`\`\`diff
-            $(cat pr.diff)
-            \`\`\`
-            </details>
+          \`\`\`diff
+          $(cat pr.diff)
+          \`\`\`
+          </details>
 
-            _AI analysis generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral_
-            EOF
+          _AI analysis generated at $(date -u +'%Y-%m-%d %H:%M UTC') using Mistral_
+          EOF
 
-            gh pr edit "${{ github.event.pull_request.number }}" \
-                --repo "${{ github.repository }}" \
-                --body-file new_body.md
+          gh pr edit "${{ github.event.pull_request.number }}" \
+              --repo "${{ github.repository }}" \
+              --body-file new_body.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -150,8 +150,8 @@ jobs:
             --repo "${{ github.repository }}" \
             --body "### 🤖 AI Summary Notice
 
-${{ steps.diff-analysis.outputs.summary_status }}
+            ${{ steps.diff-analysis.outputs.summary_status }}
 
-No automated analysis was performed for this PR. Please check the PR diff for any relevant changes."
+            No automated analysis was performed for this PR. Please check the PR diff for any relevant changes."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
