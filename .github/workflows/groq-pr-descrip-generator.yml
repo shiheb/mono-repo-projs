@@ -19,46 +19,51 @@ jobs:
         id: git-diff
         run: |
           git diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > diff.txt
-          # Extract first 8000 characters of diff and encode as JSON-safe string
-          DIFF_CONTENT=$(cat diff.txt | head -c 8000 | jq -sR)
-          echo "DIFF_CONTENT=$DIFF_CONTENT" >> $GITHUB_OUTPUT
+          head -c 8000 diff.txt > trimmed_diff.txt
+          DIFF_CONTENT=$(cat trimmed_diff.txt | jq -Rs .)
+          echo "DIFF_CONTENT=$DIFF_CONTENT" >> $GITHUB_ENV
 
       - name: Generate Summary via Groq
         id: groq-summary
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          DIFF_CONTENT: ${{ steps.git-diff.outputs.DIFF_CONTENT }}
         run: |
-          # Call Groq API
+          echo "Preparing JSON payload..."
+
+          REQUEST=$(jq -n \
+            --arg model "mixtral-8x7b-32768" \
+            --arg system_content "You are a senior developer analyzing GitHub PRs. Provide: 1) Purpose (15 words max), 2) Key changes (bullets), 3) Impact." \
+            --arg user_content "$DIFF_CONTENT" \
+            '{
+              model: $model,
+              messages: [
+                { role: "system", content: $system_content },
+                { role: "user", content: $user_content }
+              ],
+              temperature: 0.2,
+              max_tokens: 300
+            }'
+          )
+
+          echo "Calling Groq API..."
           RESPONSE=$(curl -s -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $GROQ_API_KEY" \
-            -d '{
-              "model": "mixtral-8x7b-32768",
-              "messages": [
-                {
-                  "role": "system",
-                  "content": "You are a senior developer analyzing GitHub PRs. Provide: 1) Purpose (15 words max), 2) Key changes (bullets), 3) Impact."
-                },
-                {
-                  "role": "user",
-                  "content": '"$DIFF_CONTENT"'
-                }
-              ],
-              "temperature": 0.2,
-              "max_tokens": 300
-            }' https://api.groq.com/openai/v1/chat/completions)
+            -d "$REQUEST" \
+            https://api.groq.com/openai/v1/chat/completions)
 
-          # Parse and save summary
-          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          echo "Raw Groq response:"
+          echo "$RESPONSE"
 
-          # Output for next step
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "⚠️ Groq response was empty or invalid."')
+
+          # Set output
           echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
           echo "### 🚀 Groq-Powered PR Analysis" >> $GITHUB_OUTPUT
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Post summary as PR comment
+      - name: Post summary
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
