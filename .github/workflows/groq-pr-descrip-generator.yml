@@ -1,0 +1,65 @@
+name: AI PR Summary with Groq
+on: [pull_request]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  generate-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR Diff
+        id: git-diff
+        run: |
+          git diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > diff.txt
+          echo "DIFF_CONTENT=$(cat diff.txt | head -c 8000 | jq -sR)" >> $GITHUB_OUTPUT
+
+      - name: Generate Summary via Groq
+        id: groq-summary
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          # Get diff from previous step
+          DIFF=${{ steps.git-diff.outputs.DIFF_CONTENT }}
+
+          # Call Groq API
+          RESPONSE=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $GROQ_API_KEY" \
+            -d '{
+              "model": "mixtral-8x7b-32768",
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You are a senior developer analyzing GitHub PRs. Provide: 1) Purpose (15 words max), 2) Key changes (bullets), 3) Impact."
+                },
+                {
+                  "role": "user",
+                  "content": ('"$DIFF"')
+                }
+              ],
+              "temperature": 0.2,
+              "max_tokens": 300
+            }' https://api.groq.com/openai/v1/chat/completions)
+
+          # Process response
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+
+          # Set output
+          echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
+          echo "### 🚀 Groq-Powered PR Analysis" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Post summary
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: ${{ steps.groq-summary.outputs.SUMMARY }}
+          edit-mode: replace

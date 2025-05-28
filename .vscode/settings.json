@@ -1,5 +1,5 @@
 {
-  "cSpell.words": ["projs", "shiheb"],
+  "cSpell.words": ["groq", "projs", "shiheb"],
   "secret-stack.promptToScanBeforePush": "30days",
   "editor.formatOnSave": true
 }
