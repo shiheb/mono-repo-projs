@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <meta name="description" content="" />
+    <meta name="author" content="" />
+    <title><%= pageName %></title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <!-- Font Awesome icons (free version)-->
+    <script
+      src="https://use.fontawesome.com/releases/v6.3.0/js/all.js"
+      crossorigin="anonymous"
+    ></script>
+    <!-- Google fonts-->
+    <link
+      href="https://fonts.googleapis.com/css?family=Varela+Round"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i"
+      rel="stylesheet"
+    />
+    <!-- Core theme CSS (includes Bootstrap)-->
+    <link href="css/styles.css" rel="stylesheet" />
+  </head>
+  <body id="page-top">
+    <!-- Navigation-->
+    <%-include("includes/nav")%>
+    <!-- Signup-->
+    <section class="signup-section" id="signup">
+      <div class="container px-4 px-lg-5">
+        <div class="row gx-4 gx-lg-5">
+          <div class="col-md-10 col-lg-8 mx-auto text-center">
+            <i class="far fa-paper-plane fa-2x mb-2 text-white"></i>
+            <h2 class="text-white mb-5">Register</h2>
+            <!-- * * * * * * * * * * * * * * *-->
+            <!-- * * SB Forms Contact Form * *-->
+            <!-- * * * * * * * * * * * * * * *-->
+            <!-- This form is pre-integrated with SB Forms.-->
+            <!-- To make this form functional, sign up at-->
+            <!-- https://startbootstrap.com/solution/contact-forms-->
+            <!-- to get an API token!-->
+            <form
+              class="form-signup"
+              id="contactForm"
+              action="/register"
+              method="POST"
+            >
+              <% if(typeof(message) != "undefined") {%>
+              <h4 style="color: red"><%=message%></h4>
+              <% }%>
+
+              <div class="row input-group-newsletter">
+                <div class="col">
+                  <input
+                    class="form-control"
+                    id="firstName"
+                    type="text"
+                    name="firstName"
+                    placeholder="Enter first name..."
+                    aria-label="Enter first name..."
+                  />
+                </div>
+              </div>
+              <div class="space"></div>
+              <div class="row input-group-newsletter">
+                <div class="col">
+                  <input
+                    class="form-control"
+                    id="lastName"
+                    type="text"
+                    name="lastName"
+                    placeholder="Enter last name..."
+                    aria-label="Enter last name..."
+                  />
+                  <% if(typeof(errs) != "undefined") {%>
+                  <span style="color: red"> <%=errs.lastNameMsg%> </span>
+                  <% }%>
+                </div>
+              </div>
+              <div class="space"></div>
+              <div class="row input-group-newsletter">
+                <div class="col">
+                  <input
+                    class="form-control"
+                    id="address"
+                    type="text"
+                    name="address"
+                    placeholder="Enter address..."
+                    aria-label="Enter address..."
+                  />
+                </div>
+              </div>
+              <div class="space"></div>
+              <div class="row input-group-newsletter">
+                <div class="col">
+                  <input
+                    class="form-control"
+                    id="city"
+                    type="text"
+                    name="city"
+                    placeholder="Enter city..."
+                    aria-label="Enter city..."
+                  />
+                </div>
+              </div>
+              <div class="space"></div>
+              <div class="row input-group-newsletter">
+                <div class="col">
+                  <input
+                    class="form-control"
+                    id="state"
+                    type="text"
+                    name="state"
+                    placeholder="Enter state..."
+                    aria-label="Enter state..."
+                  />
+                </div>
+              </div>
+              <div class="space"></div>
+              <div class="row input-group-newsletter">
+                <div class="col">
+                  <input
+                    class="form-control"
+                    id="zipCode"
+                    type="text"
+                    name="zipCode"
+                    placeholder="Enter zipCode..."
+                    aria-label="Enter zipCode..."
+                  />
+                </div>
+              </div>
+              <div class="space"></div>
+
+              <!-- Email address input-->
+              <div class="row input-group-newsletter">
+                <div class="col">
+                  <input
+                    class="form-control"
+                    id="emailAddress"
+                    type="email"
+                    name="email"
+                    placeholder="Enter email address..."
+                    aria-label="Enter email address..."
+                  />
+                </div>
+              </div>
+              <div class="space"></div>
+              <div class="row input-group-newsletter">
+                <div class="col">
+                  <input
+                    class="form-control"
+                    id="password"
+                    type="password"
+                    name="password"
+                    placeholder="Enter password..."
+                    aria-label="Enter password..."
+                  />
+                </div>
+              </div>
+              <div class="space"></div>
+              <div class="row input-group-newsletter">
+                <div class="col">
+                  <input
+                    class="form-control"
+                    id="confirmPassword"
+                    type="password"
+                    name="confirmPassword"
+                    placeholder="Confirm password..."
+                    aria-label="Confirm password..."
+                  />
+                </div>
+              </div>
+              <div class="space"></div>
+              <div class="col-auto">
+                <button class="btn btn-primary" id="submitButton" type="submit">
+                  Register!
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- Footer-->
+    <%-include("includes/footer")%>
+    <!-- Bootstrap core JS-->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Core theme JS-->
+    <script src="js/scripts.js"></script>
+    <!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *-->
+    <!-- * *                               SB Forms JS                               * *-->
+    <!-- * * Activate your form at https://startbootstrap.com/solution/contact-forms * *-->
+    <!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *-->
+    <script src="https://cdn.startbootstrap.com/sb-forms-latest.js"></script>
+  </body>
+</html>
