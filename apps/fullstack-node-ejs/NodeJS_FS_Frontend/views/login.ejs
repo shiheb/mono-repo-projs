@@ -52,6 +52,7 @@
               action="/login"
               method="POST"
             >
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <% if(typeof(message) != "undefined") {%>
               <h4 style="color: red"><%=message%></h4>
               <% }%>

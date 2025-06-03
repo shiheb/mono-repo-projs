@@ -7,28 +7,42 @@ const {
 const isEmpty = require("../utilities/util");
 const messages = require("../utilities/messages");
 const { postRegister, postLogin } = require("../services/userService");
-const router = express.Router();
-
-let session = require("express-session");
+const session = require("express-session");
+const csrf = require("csurf");
 require("dotenv").config();
 
-// use middleware to create express session
+const router = express.Router();
+
+// Configure session middleware with secure cookies
 router.use(
   session({
     secret: process.env.secret,
     resave: false,
     saveUninitialized: true,
+    cookie: {
+      secure: process.env.NODE_ENV === "production", // HTTPS only in production
+      httpOnly: true, // Prevent JS access to cookie
+      sameSite: "lax", // Helps mitigate CSRF attacks
+    },
   })
 );
 
+// CSRF protection middleware
+const csrfProtection = csrf();
+router.use(csrfProtection);
+
+// Middleware to pass csrfToken to all views
+router.use((req, res, next) => {
+  res.locals.csrfToken = req.csrfToken();
+  next();
+});
+
 router.get("/", (req, res) => {
-  session = req.session;
-  res.render("home", { pageName: "Home", session: session });
+  res.render("home", { pageName: "Home", session: req.session });
 });
 
 router.get("/about", (req, res) => {
-  session = req.session;
-  res.render("about", { pageName: "About", session: session });
+  res.render("about", { pageName: "About", session: req.session });
 });
 
 router.get("/register", (req, res) => {
@@ -37,7 +51,6 @@ router.get("/register", (req, res) => {
 
 router.post("/register", (req, res) => {
   const errors = validateRegistration(req.body);
-  // call the backend
   console.log({ errors });
 
   if (isEmpty(errors)) {
@@ -69,13 +82,12 @@ router.get("/login", (req, res) => {
 });
 
 router.post("/login", (req, res) => {
-  session = req.session;
   const errors = validateLogin(req.body);
 
   if (isEmpty(errors)) {
     postLogin(req.body)
       .then((result) => {
-        console.log(result.data);
+        const session = req.session;
         session.name = result.data.user.firstName;
         session.logged = result.data.logged;
         session.token = result.data.token;
@@ -103,8 +115,9 @@ router.post("/login", (req, res) => {
 });
 
 router.get("/logout", (req, res) => {
-  req.session.destroy();
-  res.render("home", { pageName: "Home" });
+  req.session.destroy(() => {
+    res.render("home", { pageName: "Home" });
+  });
 });
 
 module.exports = router;
