@@ -1,0 +1,30 @@
+{
+  "name": "nodejs_fs_backend",
+  "version": "1.0.0",
+  "description": "NodeJs Rest API Backend Service",
+  "main": "server.js",
+  "scripts": {
+    "start": "nodemon server",
+    "test": "jest --coverage --passWithNoTests",
+    "devStart": "node server"
+  },
+  "keywords": [
+    "NodeJs",
+    "RestAPI",
+    "service"
+  ],
+  "author": "Chiheb Hmida",
+  "license": "MIT",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.15.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.10"
+  }
+}
