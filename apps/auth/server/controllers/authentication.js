@@ -22,7 +22,7 @@ exports.signup = async function (req, res, next) {
   }
 
   try {
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ $eq: email });
 
     if (existingUser) {
       return res.status(422).send({ error: 'Email is in use' });
