@@ -2,13 +2,12 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const Schema = mongoose.Schema;
 
-// Define user schema
+
 const userSchema = new Schema({
   email: { type: String, unique: true, lowercase: true },
   password: String
 });
 
-// Pre-save hook to hash the password
 userSchema.pre('save', async function (next) {
   try {
     const user = this;
@@ -25,11 +24,11 @@ userSchema.pre('save', async function (next) {
   }
 });
 
-// Add method to compare passwords
+
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Export model
+
 const User = mongoose.model('user', userSchema);
 module.exports = User;
