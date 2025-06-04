@@ -1,8 +1,8 @@
 const express = require("express");
 const cors = require("cors");
-const bookRouter = require("../router/bookRouter");
-const userRouter = require("../router/userRouter");
-const { connect } = require("../db/db");
+const bookRouter = require("./router/bookRouter");
+const userRouter = require("./router/userRouter");
+const { connect } = require("./db/db");
 const app = express();
 
 // use middleware to form our contract for incoming json payload ONLY!!
